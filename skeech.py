@@ -350,48 +350,48 @@ def main():
                 print(f"Joystick {event.joy} Button {event.button} pressed")
 
                 # Track quit-hold start
-                if event.joy == 2 and event.button == 6:
+                if event.joy == 2 and event.button == 9:
                     game.pre_quit_state = game.state
                     game.state = STATE_CONFIRM_QUIT
 
                 # ---- Confirm Quit dialog ----
                 elif game.state == STATE_CONFIRM_QUIT:
-                    if event.joy == 2 and event.button == 5:   # White = Yes, go to welcome
+                    if event.joy == 2 and event.button == 8:   # White = Yes, go to welcome
                         game.go_to_welcome()
-                    elif event.joy == 2 and event.button == 1: # Black = No, cancel
+                    elif event.joy == 2 and event.button == 4: # Black = No, cancel
                         game.state = game.pre_quit_state
 
                 # ---- Declare Winner confirm dialog ----
                 elif game.state == STATE_DECLARE_WINNER:
-                    if event.joy == 2 and event.button == 1:   # Black = confirm
+                    if event.joy == 2 and event.button == 4:   # Black = confirm
                         game.winner = game.declare_winner_player
                         game.game_active = False
                         game.winner_announced_time = now
                         game.declare_winner_player = None
                         game.state = STATE_WINNER
-                    elif event.joy == 2 and event.button == 5: # White = cancel
+                    elif event.joy == 2 and event.button == 8: # White = cancel
                         game.state = game.pre_declare_state
                         game.declare_winner_player = None
 
-                elif event.joy == 2 and event.button == 0:
+                elif event.joy == 2 and event.button == 3:
                     game.start_game()
 
                 # ---- Retribution dialog: White=game over, Black=retribution ----
                 elif game.state == STATE_RETRIBUTION:
-                    if event.joy == 2 and event.button == 5:
+                    if event.joy == 2 and event.button == 8:
                         # White → current player wins (game over)
                         game.winner = game.retribution_player
                         game.game_active = False
                         game.winner_announced_time = now
                         game.state = STATE_WINNER
-                    elif event.joy == 2 and event.button == 1:
+                    elif event.joy == 2 and event.button == 4:
                         # Black → other player gets a chance
                         game.state = STATE_RETRIBUTION_WAIT
                         game.game_active = True
 
                 # ---- Retribution Wait: Black declare = declare retribution player winner ----
                 elif game.state == STATE_RETRIBUTION_WAIT:
-                    if event.joy == 2 and event.button == 1:   # Black = declare winner
+                    if event.joy == 2 and event.button == 4:   # Black = declare winner
                         game.declare_winner_player = game.retribution_player
                         game.pre_declare_state = STATE_RETRIBUTION_WAIT
                         game.state = STATE_DECLARE_WINNER
@@ -419,7 +419,7 @@ def main():
 
                 # ---- Sudden Death: Black declare = declare leading player winner ----
                 elif game.state == STATE_SUDDEN_DEATH:
-                    if event.joy == 2 and event.button == 1:
+                    if event.joy == 2 and event.button == 4:
                         if game.player1_score > game.player2_score:
                             leading = 1
                         elif game.player2_score > game.player1_score:
