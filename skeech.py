@@ -83,6 +83,7 @@ STATE_RETRIBUTION_WAIT = "retribution_wait"  # Other player tries to reach 21
 STATE_SUDDEN_DEATH = "sudden_death"  # Both at 21 - flash "Sudden Death!"
 STATE_WINNER = "winner"
 STATE_DECLARE_WINNER = "declare_winner"  # Confirm declare-winner dialog
+STATE_CONFIRM_QUIT = "confirm_quit"      # Confirm before returning to welcome screen
 
 class GameState:
     def __init__(self):
@@ -108,9 +109,15 @@ class GameState:
         # Sudden death
         self.sudden_death_start_time = None
 
-        # Declare winner dialog
-        self.declare_winner_player = None   # which player to declare winner
-        self.pre_declare_state = None       # state to return to if cancelled
+        # Declare winner
+        self.declare_winner_player = None
+        self.pre_declare_state = None
+
+        # Quit confirmation
+        self.pre_quit_state = None
+
+    def go_to_welcome(self):
+        self.__init__()
 
     def start_game(self):
         self.player1_score = 0
@@ -311,6 +318,16 @@ def main():
     clock = pygame.time.Clock()
     running = True
 
+#    if pygame.joystick.get_count() > 0:
+#        joystick = pygame.joystick.Joystick(0)
+#        joystick.init()
+#    if pygame.joystick.get_count() > 1:
+#        joystick2 = pygame.joystick.Joystick(1)
+#        joystick2.init()
+#    if pygame.joystick.get_count() > 2:
+#        joystick3= pygame.joystick.Joystick(2)
+#        joystick3.init()
+
     header_height = 20
     footer_height = 20
     scoreboard_height = height - header_height - footer_height
@@ -322,17 +339,8 @@ def main():
 
     OVER21_DISPLAY_MS = 2000  # how long to show "You Went Over" before resuming
 
-    # Quit-hold tracking
-    quit_held_since = None   # time when joy2 btn6 was first held
-
     while running:
         now = pygame.time.get_ticks()
-
-        # ---- Check quit-hold (joy2 btn6 held 5 seconds → hard kill) ----
-        if quit_held_since is not None:
-            if now - quit_held_since >= 5000:
-                pygame.quit()
-                sys.exit(0)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -343,7 +351,15 @@ def main():
 
                 # Track quit-hold start
                 if event.joy == 2 and event.button == 6:
-                    quit_held_since = now
+                    game.pre_quit_state = game.state
+                    game.state = STATE_CONFIRM_QUIT
+
+                # ---- Confirm Quit dialog ----
+                elif game.state == STATE_CONFIRM_QUIT:
+                    if event.joy == 2 and event.button == 5:   # White = Yes, go to welcome
+                        game.go_to_welcome()
+                    elif event.joy == 2 and event.button == 1: # Black = No, cancel
+                        game.state = game.pre_quit_state
 
                 # ---- Declare Winner confirm dialog ----
                 elif game.state == STATE_DECLARE_WINNER:
@@ -360,7 +376,7 @@ def main():
                 elif event.joy == 2 and event.button == 0:
                     game.start_game()
 
-                # ---- Retribution dialog: White=game over, Black=retribution, Black(declare)=declare winner ----
+                # ---- Retribution dialog: White=game over, Black=retribution ----
                 elif game.state == STATE_RETRIBUTION:
                     if event.joy == 2 and event.button == 5:
                         # White → current player wins (game over)
@@ -369,30 +385,53 @@ def main():
                         game.winner_announced_time = now
                         game.state = STATE_WINNER
                     elif event.joy == 2 and event.button == 1:
-                        # Black → retribution (other player gets a chance)
+                        # Black → other player gets a chance
                         game.state = STATE_RETRIBUTION_WAIT
                         game.game_active = True
-                    elif event.joy == 2 and event.button == 3:
-                        # Black declare → open declare winner dialog
+
+                # ---- Retribution Wait: Black declare = declare retribution player winner ----
+                elif game.state == STATE_RETRIBUTION_WAIT:
+                    if event.joy == 2 and event.button == 1:   # Black = declare winner
                         game.declare_winner_player = game.retribution_player
-                        game.pre_declare_state = STATE_RETRIBUTION
+                        game.pre_declare_state = STATE_RETRIBUTION_WAIT
                         game.state = STATE_DECLARE_WINNER
+                    # Normal scoring still works during retribution wait
+                    elif event.joy == 0 and event.button == 0:
+                        game.add_score(1, 1)
+                    elif event.joy == 0 and event.button == 1:
+                        game.add_score(1, 3)
+                    elif event.joy == 0 and event.button == 2:
+                        game.add_score(1, 5)
+                    elif event.joy == 0 and event.button == 10:
+                        game.add_score(1, 3)
+                    elif event.joy == 0 and event.button == 11:
+                        game.add_score(1, 1)
+                    elif event.joy == 1 and event.button == 0:
+                        game.add_score(2, 1)
+                    elif event.joy == 1 and event.button == 1:
+                        game.add_score(2, 3)
+                    elif event.joy == 1 and event.button == 2:
+                        game.add_score(2, 5)
+                    elif event.joy == 1 and event.button == 10:
+                        game.add_score(2, 3)
+                    elif event.joy == 1 and event.button == 11:
+                        game.add_score(2, 1)
 
                 # ---- Sudden Death: Black declare = declare leading player winner ----
                 elif game.state == STATE_SUDDEN_DEATH:
-                    if event.joy == 2 and event.button == 3:
+                    if event.joy == 2 and event.button == 1:
                         if game.player1_score > game.player2_score:
                             leading = 1
                         elif game.player2_score > game.player1_score:
                             leading = 2
                         else:
-                            leading = 1  # tie: default to player 1
+                            leading = 1  # tie: default to player 1 / Blue
                         game.declare_winner_player = leading
                         game.pre_declare_state = STATE_SUDDEN_DEATH
                         game.state = STATE_DECLARE_WINNER
 
                 # ---- Normal gameplay ----
-                elif game.state in (STATE_PLAYING, STATE_RETRIBUTION_WAIT):
+                elif game.state == STATE_PLAYING:
                     if event.joy == 0 and event.button == 0:
                         game.add_score(1, 1)
                     elif event.joy == 0 and event.button == 1:
@@ -414,15 +453,18 @@ def main():
                     elif event.joy == 1 and event.button == 11:
                         game.add_score(2, 1)
 
-            elif event.type == pygame.JOYBUTTONUP:
-                # Cancel quit-hold if released before 5 seconds
-                if event.joy == 2 and event.button == 6:
-                    quit_held_since = None
-                    running = False  # single tap still quits
-
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    running = False
+                    game.pre_quit_state = game.state
+                    game.state = STATE_CONFIRM_QUIT
+
+                # ---- Confirm Quit dialog (keyboard) ----
+                elif game.state == STATE_CONFIRM_QUIT:
+                    if event.key == pygame.K_y:
+                        game.go_to_welcome()
+                    elif event.key == pygame.K_n:
+                        game.state = game.pre_quit_state
+
                 elif event.key == pygame.K_SPACE:
                     game.start_game()
                 elif event.key == pygame.K_BACKSPACE:
@@ -430,17 +472,17 @@ def main():
 
                 # ---- Declare Winner confirm (keyboard) ----
                 elif game.state == STATE_DECLARE_WINNER:
-                    if event.key == pygame.K_RETURN:    # confirm
+                    if event.key == pygame.K_RETURN:
                         game.winner = game.declare_winner_player
                         game.game_active = False
                         game.winner_announced_time = now
                         game.declare_winner_player = None
                         game.state = STATE_WINNER
-                    elif event.key == pygame.K_ESCAPE or event.key == pygame.K_x:
+                    elif event.key == pygame.K_x:
                         game.state = game.pre_declare_state
                         game.declare_winner_player = None
 
-                # ---- Retribution dialog keyboard ----
+                # ---- Retribution dialog keyboard: N = No, Y = Yes ----
                 elif game.state == STATE_RETRIBUTION:
                     if event.key == pygame.K_n:
                         game.winner = game.retribution_player
@@ -450,12 +492,27 @@ def main():
                     elif event.key == pygame.K_y:
                         game.state = STATE_RETRIBUTION_WAIT
                         game.game_active = True
-                    elif event.key == pygame.K_d:
-                        game.declare_winner_player = game.retribution_player
-                        game.pre_declare_state = STATE_RETRIBUTION
-                        game.state = STATE_DECLARE_WINNER
 
-                # ---- Sudden Death keyboard ----
+                # ---- Retribution Wait: D = declare winner ----
+                elif game.state == STATE_RETRIBUTION_WAIT:
+                    if event.key == pygame.K_d:
+                        game.declare_winner_player = game.retribution_player
+                        game.pre_declare_state = STATE_RETRIBUTION_WAIT
+                        game.state = STATE_DECLARE_WINNER
+                    elif event.key == pygame.K_q:
+                        game.add_score(1, 1)
+                    elif event.key == pygame.K_w:
+                        game.add_score(1, 3)
+                    elif event.key == pygame.K_e:
+                        game.add_score(1, 5)
+                    elif event.key == pygame.K_i:
+                        game.add_score(2, 1)
+                    elif event.key == pygame.K_o:
+                        game.add_score(2, 3)
+                    elif event.key == pygame.K_p:
+                        game.add_score(2, 5)
+
+                # ---- Sudden Death: D = declare winner ----
                 elif game.state == STATE_SUDDEN_DEATH:
                     if event.key == pygame.K_d:
                         leading = 1 if game.player1_score >= game.player2_score else 2
@@ -464,7 +521,7 @@ def main():
                         game.state = STATE_DECLARE_WINNER
 
                 # ---- Normal gameplay ----
-                elif game.state in (STATE_PLAYING, STATE_RETRIBUTION_WAIT):
+                elif game.state == STATE_PLAYING:
                     if event.key == pygame.K_q:
                         game.add_score(1, 1)
                     elif event.key == pygame.K_w:
@@ -489,7 +546,7 @@ def main():
 
         # Sudden Death: after 7 seconds, reset both scores to 0
         if game.state == STATE_SUDDEN_DEATH:
-            if now - game.sudden_death_start_time >= 7000:
+            if now - game.sudden_death_start_time >= 5000:
                 game.player1_score = 0
                 game.player2_score = 0
                 game.retribution_player = None
@@ -521,6 +578,7 @@ def main():
         # ---- STATE-SPECIFIC OVERLAYS ----
 
         if game.state == STATE_OVER_21:
+            # Semi-transparent dark overlay
             draw_overlay_box(screen, width, height)
             elapsed = now - game.over21_start_time
             pulse_alpha = int(180 + 75 * math.sin(elapsed / 120.0))
@@ -529,6 +587,11 @@ def main():
             over_surf.set_alpha(pulse_alpha)
             over_rect = over_surf.get_rect(center=(width // 2, height // 2 - 60))
             screen.blit(over_surf, over_rect)
+
+            #sub_surf = sub_font.render(f"Player {game.over21_player} score reset to 15", True, WHITE)
+            #sub_surf.set_alpha(pulse_alpha)
+            #sub_rect = sub_surf.get_rect(center=(width // 2, height // 2 + 60))
+            #screen.blit(sub_surf, sub_rect)
 
         elif game.state == STATE_RETRIBUTION:
             draw_overlay_box(screen, width, height)
@@ -541,7 +604,7 @@ def main():
             screen.blit(ret_surf, ret_surf.get_rect(center=(width // 2, height // 2 - 130)))
 
             # Stacked message panel
-            msg_font2   = pygame.font.Font(None, 62)
+            msg_font2 = pygame.font.Font(None, 62)
             white_surf = msg_font2.render("White Button = Game Over",   True, WHITE)
             black_surf = msg_font2.render("Black Button = Retribution", True, (20, 20, 20))
 
@@ -571,30 +634,31 @@ def main():
             pygame.draw.rect(screen, (120, 120, 120), strip_rect, width=2, border_radius=5)
             screen.blit(black_surf, black_surf.get_rect(center=(width // 2, row2_y + strip_h // 2)))
 
-            # "Press Black to Declare Winner" banner at bottom
-            declare_font = pygame.font.Font(None, 52)
-            pulse_alpha2 = int(180 + 75 * math.sin(game.pulse_time * 2.5))
+        elif game.state == STATE_RETRIBUTION_WAIT:
+            # Banner telling the other player to try for 21
+            # other_player = 2 if game.retribution_player == 1 else 1
+            # banner_font = pygame.font.Font(None, 70)
+            # pulse_alpha = int(180 + 75 * math.sin(game.pulse_time * 3))
+            # banner_surf = banner_font.render(f"Player {other_player}: Score 21 for Retribution!", True, YELLOW)
+            # banner_surf.set_alpha(pulse_alpha)
+            # banner_rect = banner_surf.get_rect(center=(width // 2, height - footer_height - 80))
+            # pad = 18
+            # bg_rect = banner_rect.inflate(pad * 2, pad * 2)
+            # bg_surf = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
+            # bg_surf.fill((0, 0, 0, 170))
+            # screen.blit(bg_surf, bg_rect.topleft)
+            # screen.blit(banner_surf, banner_rect)
+
+            # "Press Black to Declare Winner" banner below
+            declare_font = pygame.font.Font(None, 50)
+            pulse_alpha2 = int(160 + 75 * math.sin(game.pulse_time * 2.5 + 1))
             declare_surf = declare_font.render("Press Black to Declare Winner", True, WHITE)
             declare_surf.set_alpha(pulse_alpha2)
-            declare_rect = declare_surf.get_rect(center=(width // 2, height - footer_height - 40))
-            bg_declare = pygame.Surface((declare_rect.width + 30, declare_rect.height + 14), pygame.SRCALPHA)
-            bg_declare.fill((0, 0, 0, 160))
+            declare_rect = declare_surf.get_rect(center=(width // 2, height - footer_height - 30))
+            bg_declare = pygame.Surface((declare_rect.width + 30, declare_rect.height + 10), pygame.SRCALPHA)
+            bg_declare.fill((0, 0, 0, 150))
             screen.blit(bg_declare, bg_declare.get_rect(center=declare_rect.center))
             screen.blit(declare_surf, declare_rect)
-
-        elif game.state == STATE_RETRIBUTION_WAIT:
-            other_player = 2 if game.retribution_player == 1 else 1
-            banner_font = pygame.font.Font(None, 80)
-            pulse_alpha = int(180 + 75 * math.sin(game.pulse_time * 3))
-            banner_surf = banner_font.render(f"Player {other_player}: Score 21 for Retribution!", True, YELLOW)
-            banner_surf.set_alpha(pulse_alpha)
-            banner_rect = banner_surf.get_rect(center=(width // 2, height - footer_height - 60))
-            pad = 18
-            bg_rect = banner_rect.inflate(pad * 2, pad * 2)
-            bg_surf = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
-            bg_surf.fill((0, 0, 0, 170))
-            screen.blit(bg_surf, bg_rect.topleft)
-            screen.blit(banner_surf, banner_rect)
 
         elif game.state == STATE_SUDDEN_DEATH:
             elapsed = now - game.sudden_death_start_time
@@ -608,11 +672,11 @@ def main():
             screen.blit(sd_surf, sd_rect)
 
             remaining = max(0, 7 - (elapsed // 1000))
-            countdown_surf = sub_font.render(f"Both reset to 0 in {remaining}...", True, WHITE)
-            countdown_rect = countdown_surf.get_rect(center=(width // 2, height // 2 + 60))
-            screen.blit(countdown_surf, countdown_rect)
+            #countdown_surf = sub_font.render(f"Both reset to 0 in {remaining}...", True, WHITE)
+            #countdown_rect = countdown_surf.get_rect(center=(width // 2, height // 2 + 60))
+            #screen.blit(countdown_surf, countdown_rect)
 
-            # "Press Black to Declare Winner" banner at bottom
+            # "Press Black to Declare Winner" banner
             declare_font = pygame.font.Font(None, 52)
             pulse_alpha2 = int(180 + 75 * math.sin(game.pulse_time * 2.5))
             declare_surf = declare_font.render("Press Black to Declare Winner", True, WHITE)
@@ -628,17 +692,15 @@ def main():
             player_name = "Blue" if game.declare_winner_player == 1 else "Red"
             name_color  = BLUE   if game.declare_winner_player == 1 else RED
 
-            # Title
             dw_font = pygame.font.Font(None, 110)
             pulse_alpha = int(200 + 55 * math.sin(game.pulse_time * 4))
             dw_surf = dw_font.render(f"Declare {player_name} Winner?", True, name_color)
             dw_surf.set_alpha(pulse_alpha)
             screen.blit(dw_surf, dw_surf.get_rect(center=(width // 2, height // 2 - 80)))
 
-            # Stacked confirm/cancel panel
-            msg_font3  = pygame.font.Font(None, 60)
-            conf_surf  = msg_font3.render("Black Button = Confirm",  True, (20, 20, 20))
-            cancel_surf= msg_font3.render("White Button = Cancel",   True, WHITE)
+            msg_font3   = pygame.font.Font(None, 60)
+            conf_surf   = msg_font3.render("Black Button = Confirm", True, (20, 20, 20))
+            cancel_surf = msg_font3.render("White Button = Cancel",  True, WHITE)
 
             pad_x, pad_y, row_gap = 40, 24, 14
             panel_w = max(conf_surf.get_width(), cancel_surf.get_width()) + pad_x * 2
@@ -651,7 +713,7 @@ def main():
             screen.blit(panel_surf2, (panel_x, panel_y))
             pygame.draw.rect(screen, WHITE, pygame.Rect(panel_x, panel_y, panel_w, panel_h), width=3, border_radius=8)
 
-            # Row 1: Black = confirm (light strip, dark text)
+            # Row 1: Black = confirm on light strip
             row1_y = panel_y + pad_y
             strip1_h = conf_surf.get_height() + pad_y
             strip1 = pygame.Surface((panel_w - 6, strip1_h), pygame.SRCALPHA)
@@ -664,7 +726,7 @@ def main():
             div_y = row1_y + strip1_h + row_gap // 2
             pygame.draw.line(screen, (140, 145, 155), (panel_x + 20, div_y), (panel_x + panel_w - 20, div_y), 1)
 
-            # Row 2: White = cancel (dark background, white text)
+            # Row 2: White = cancel on dark background
             row2_y = div_y + row_gap // 2
             screen.blit(cancel_surf, cancel_surf.get_rect(center=(width // 2, row2_y + cancel_surf.get_height() // 2 + 8)))
 
@@ -680,16 +742,45 @@ def main():
             pygame.draw.rect(screen, YELLOW, box_rect, 3)
             screen.blit(press_start_text, rect)
 
-        # ---- Quit-hold progress indicator ----
-        if quit_held_since is not None:
-            held_ms = now - quit_held_since
-            progress = min(held_ms / 5000.0, 1.0)
-            bar_w = int(width * progress)
-            pygame.draw.rect(screen, RED, (0, height - footer_height, bar_w, footer_height))
-            if held_ms > 500:
-                kill_font = pygame.font.Font(None, 45)
-                kill_surf = kill_font.render("Hold to force quit...", True, WHITE)
-                screen.blit(kill_surf, kill_surf.get_rect(center=(width // 2, height - footer_height // 2)))
+        # Confirm Quit overlay — drawn on top of any state
+        if game.state == STATE_CONFIRM_QUIT:
+            draw_overlay_box(screen, width, height)
+
+            cf = pygame.font.Font(None, 130)
+            pulse_alpha = int(200 + 55 * math.sin(game.pulse_time * 4))
+            cs = cf.render("Quit to Menu?", True, YELLOW)
+            cs.set_alpha(pulse_alpha)
+            screen.blit(cs, cs.get_rect(center=(width // 2, height // 2 - 100)))
+
+            msg_font2 = pygame.font.Font(None, 62)
+            yes_surf = msg_font2.render("White Button = Yes", True, WHITE)
+            no_surf  = msg_font2.render("Black Button = No",  True, (20, 20, 20))
+
+            pad_x, pad_y, row_gap = 40, 24, 14
+            panel_w = max(yes_surf.get_width(), no_surf.get_width()) + pad_x * 2
+            panel_h = yes_surf.get_height() + no_surf.get_height() + pad_y * 2 + row_gap
+            panel_x = width  // 2 - panel_w // 2
+            panel_y = height // 2 + 10
+
+            panel_surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+            panel_surf.fill((80, 85, 95, 235))
+            screen.blit(panel_surf, (panel_x, panel_y))
+            pygame.draw.rect(screen, WHITE, pygame.Rect(panel_x, panel_y, panel_w, panel_h), width=3, border_radius=8)
+
+            row1_y = panel_y + pad_y
+            screen.blit(yes_surf, yes_surf.get_rect(center=(width // 2, row1_y + yes_surf.get_height() // 2)))
+
+            div_y = row1_y + yes_surf.get_height() + row_gap // 2
+            pygame.draw.line(screen, (140, 145, 155), (panel_x + 20, div_y), (panel_x + panel_w - 20, div_y), 1)
+
+            row2_y = div_y + row_gap // 2
+            strip_h = no_surf.get_height() + pad_y
+            strip = pygame.Surface((panel_w - 6, strip_h), pygame.SRCALPHA)
+            strip.fill((215, 215, 215, 250))
+            strip_rect = pygame.Rect(panel_x + 3, row2_y, panel_w - 6, strip_h)
+            screen.blit(strip, strip_rect)
+            pygame.draw.rect(screen, (120, 120, 120), strip_rect, width=2, border_radius=5)
+            screen.blit(no_surf, no_surf.get_rect(center=(width // 2, row2_y + strip_h // 2)))
 
         pygame.display.flip()
         clock.tick(60)
