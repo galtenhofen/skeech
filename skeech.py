@@ -24,7 +24,7 @@ if pygame.joystick.get_count() > 2:
         joystick3.init()
 
 # Screen setup - Full screen mode
-screen = pygame.display.set_mode((1200,800))
+screen = pygame.display.set_mode((0,0),pygame.FULLSCREEN)
 pygame.display.set_caption("Scoreboard")
 width, height = screen.get_size()
 
@@ -84,6 +84,8 @@ STATE_SUDDEN_DEATH = "sudden_death"  # Both at 21 - flash "Sudden Death!"
 STATE_WINNER = "winner"
 STATE_DECLARE_WINNER = "declare_winner"  # Confirm declare-winner dialog
 STATE_CONFIRM_QUIT = "confirm_quit"      # Confirm before returning to welcome screen
+STATE_EDIT_SCORE = "edit_score"          # Edit score mode
+STATE_SKEECH_CONFIRM = "skeech_confirm"  # Skeech confirmation popup
 
 class GameState:
     def __init__(self):
@@ -116,6 +118,11 @@ class GameState:
         # Quit confirmation
         self.pre_quit_state = None
 
+        # Edit score mode
+        self.edit_player = None          # which player is being edited (1 or 2)
+        self.pre_edit_state = None       # state to return to after editing
+        self.skeech_winner = None        # set when a skeech win happens
+
     def go_to_welcome(self):
         self.__init__()
 
@@ -136,6 +143,9 @@ class GameState:
         self.sudden_death_start_time = None
         self.declare_winner_player = None
         self.pre_declare_state = None
+        self.edit_player = None
+        self.pre_edit_state = None
+        self.skeech_winner = None
 
     def add_score(self, player, points):
         if self.state not in (STATE_PLAYING, STATE_RETRIBUTION_WAIT):
@@ -353,6 +363,52 @@ def main():
                 if event.joy == 2 and event.button == 9:
                     game.pre_quit_state = game.state
                     game.state = STATE_CONFIRM_QUIT
+
+                # ---- Enter Edit Score mode ----
+                elif event.joy == 2 and event.button == 5 and game.state in (STATE_PLAYING, STATE_RETRIBUTION_WAIT, STATE_SUDDEN_DEATH):
+                    game.edit_player = 1
+                    game.pre_edit_state = game.state
+                    game.state = STATE_EDIT_SCORE
+
+                elif event.joy == 2 and event.button == 6 and game.state in (STATE_PLAYING, STATE_RETRIBUTION_WAIT, STATE_SUDDEN_DEATH):
+                    game.edit_player = 2
+                    game.pre_edit_state = game.state
+                    game.state = STATE_EDIT_SCORE
+
+                # ---- Edit Score mode controls ----
+                elif game.state == STATE_EDIT_SCORE:
+                    if event.joy == 2 and event.button == 4:    # Black = +1
+                        if game.edit_player == 1:
+                            game.player1_score += 1
+                        else:
+                            game.player2_score += 1
+                    elif event.joy == 2 and event.button == 8:  # White = -1
+                        if game.edit_player == 1:
+                            game.player1_score = max(0, game.player1_score - 1)
+                        else:
+                            game.player2_score = max(0, game.player2_score - 1)
+                    elif event.joy == 2 and event.button == 5:  # P1 = Done
+                        game.state = game.pre_edit_state
+                        game.edit_player = None
+                        game.pre_edit_state = None
+                    elif event.joy == 2 and event.button == 7:  # Blue = Skeech
+                        game.state = STATE_SKEECH_CONFIRM
+                    # All other buttons do nothing in edit mode
+
+                # ---- Skeech confirmation popup ----
+                elif game.state == STATE_SKEECH_CONFIRM:
+                    if event.joy == 2 and event.button == 7:    # Blue = confirm skeech
+                        skeech_winner = game.edit_player
+                        game.winner = skeech_winner
+                        game.game_active = False
+                        game.winner_announced_time = now
+                        game.edit_player = None
+                        game.pre_edit_state = None
+                        game.skeech_winner = skeech_winner      # remember for "You got Skeeched" display
+                        game.state = STATE_WINNER
+                    elif event.joy == 2 and event.button == 8:  # White = cancel
+                        game.state = STATE_EDIT_SCORE
+                    # All other buttons do nothing
 
                 # ---- Confirm Quit dialog ----
                 elif game.state == STATE_CONFIRM_QUIT:
@@ -741,6 +797,79 @@ def main():
             pygame.draw.rect(screen, BLACK, box_rect)
             pygame.draw.rect(screen, YELLOW, box_rect, 3)
             screen.blit(press_start_text, rect)
+
+            # If this was a skeech win, show "You got Skeeched!" on loser side
+            if hasattr(game, 'skeech_winner') and game.skeech_winner is not None:
+                loser_side_x = (half_width + half_width // 2) if game.skeech_winner == 1 else half_width // 2
+                skeech_font = pygame.font.Font(None, 80)
+                skeech_pulse = int(200 + 55 * math.sin(game.pulse_time * 3.5))
+                skeech_surf = skeech_font.render("You got Skeeched!", True, YELLOW)
+                skeech_surf.set_alpha(skeech_pulse)
+                screen.blit(skeech_surf, skeech_surf.get_rect(center=(loser_side_x, header_height + scoreboard_height // 2 + 100)))
+
+        elif game.state in (STATE_EDIT_SCORE, STATE_SKEECH_CONFIRM):
+            # Grey out the non-edited player's side
+            edit_p = game.edit_player
+            grey_x = half_width if edit_p == 1 else 0
+            grey_overlay = pygame.Surface((half_width, scoreboard_height), pygame.SRCALPHA)
+            grey_overlay.fill((80, 80, 80, 180))
+            screen.blit(grey_overlay, (grey_x, header_height))
+
+            # Determine label colors
+            edit_color = BLUE if edit_p == 1 else RED
+            edit_name = "Blue" if edit_p == 1 else "Red"
+
+            # Top banner
+            banner_font = pygame.font.Font(None, 70)
+            banner_surf = banner_font.render(f"Edit {edit_name} Score", True, edit_color)
+            banner_bg = pygame.Surface((banner_surf.get_width() + 40, banner_surf.get_height() + 16), pygame.SRCALPHA)
+            banner_bg.fill((20, 20, 20, 210))
+            banner_rect = banner_surf.get_rect(center=(width // 2, header_height + 40))
+            screen.blit(banner_bg, banner_bg.get_rect(center=banner_rect.center))
+            screen.blit(banner_surf, banner_rect)
+
+            # Bottom controls bar
+            ctrl_font = pygame.font.Font(None, 42)
+            controls = [
+                ("Black = +1", (20, 20, 20), (200, 200, 200)),
+                ("White = -1", WHITE, (60, 60, 60)),
+                ("P1 = Done", (180, 180, 255), DARK_GREY),
+                (f"Blue = Skeech", BLUE, (230, 230, 255)),
+            ]
+            bar_h = 54
+            bar_y = height - footer_height - bar_h - 6
+            bar_w = width
+            bar_bg = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
+            bar_bg.fill((30, 30, 30, 220))
+            screen.blit(bar_bg, (0, bar_y))
+            pygame.draw.rect(screen, GREY, pygame.Rect(0, bar_y, bar_w, bar_h), 2)
+
+            seg_w = bar_w // len(controls)
+            for i, (label, txt_color, bg_color) in enumerate(controls):
+                seg_x = i * seg_w
+                seg_surf = pygame.Surface((seg_w - 4, bar_h - 4), pygame.SRCALPHA)
+                seg_surf.fill((*bg_color, 200))
+                screen.blit(seg_surf, (seg_x + 2, bar_y + 2))
+                lbl = ctrl_font.render(label, True, txt_color)
+                screen.blit(lbl, lbl.get_rect(center=(seg_x + seg_w // 2, bar_y + bar_h // 2)))
+
+            # Skeech confirmation popup (drawn on top)
+            if game.state == STATE_SKEECH_CONFIRM:
+                popup_w, popup_h = 600, 220
+                popup_x = width // 2 - popup_w // 2
+                popup_y = height // 2 - popup_h // 2
+                popup_surf = pygame.Surface((popup_w, popup_h), pygame.SRCALPHA)
+                popup_surf.fill((20, 20, 20, 240))
+                screen.blit(popup_surf, (popup_x, popup_y))
+                pygame.draw.rect(screen, edit_color, pygame.Rect(popup_x, popup_y, popup_w, popup_h), 3, border_radius=10)
+
+                pop_font = pygame.font.Font(None, 90)
+                pop_surf = pop_font.render(f"{edit_name} Skeech?", True, edit_color)
+                screen.blit(pop_surf, pop_surf.get_rect(center=(width // 2, popup_y + 70)))
+
+                sub_font2 = pygame.font.Font(None, 46)
+                sub_surf = sub_font2.render("Press Blue to confirm  or  White to cancel", True, WHITE)
+                screen.blit(sub_surf, sub_surf.get_rect(center=(width // 2, popup_y + 155)))
 
         # Confirm Quit overlay — drawn on top of any state
         if game.state == STATE_CONFIRM_QUIT:
