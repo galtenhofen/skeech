@@ -1,569 +1,549 @@
 #!/usr/bin/env python3
 """
 Two-Player Scoreboard Application
-For Raspberry Pi 3 with keyboard input
+For Raspberry Pi 3 with joystick input — optimised build
 """
 
 import pygame
 import sys
-import random
 import math
 
-# Initialize Pygame
+# ---------------------------------------------------------------------------
+# Init
+# ---------------------------------------------------------------------------
 pygame.init()
 pygame.joystick.init()
 
-if pygame.joystick.get_count() > 0:
-        joystick = pygame.joystick.Joystick(0)
-        joystick.init()
-if pygame.joystick.get_count() > 1:
-        joystick2 = pygame.joystick.Joystick(1)
-        joystick2.init()
-if pygame.joystick.get_count() > 2:
-        joystick3= pygame.joystick.Joystick(2)
-        joystick3.init()
+for _idx in range(min(pygame.joystick.get_count(), 3)):
+    _js = pygame.joystick.Joystick(_idx)
+    _js.init()
 
-# Screen setup - Full screen mode
-screen = pygame.display.set_mode((0,0),pygame.FULLSCREEN)
+screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 pygame.display.set_caption("Scoreboard")
 width, height = screen.get_size()
 
+# ---------------------------------------------------------------------------
 # Colors
-BLUE = (37, 99, 235)
-RED = (220, 38, 38)
-GREY = (75, 85, 99)
-DARK_GREY = (45, 45, 45)
-YELLOW = (251, 191, 36)
-GREEN = (52, 211, 153)
-WHITE = (255, 255, 255)
-BLACK = (26, 26, 26)
-ORANGE = (255, 140, 0)
+# ---------------------------------------------------------------------------
+BLUE      = (37,  99,  235)
+RED       = (220, 38,  38)
+GREY      = (75,  85,  99)
+DARK_GREY = (45,  45,  45)
+YELLOW    = (251, 191, 36)
+GREEN     = (52,  211, 153)
+WHITE     = (255, 255, 255)
+BLACK     = (26,  26,  26)
+ORANGE    = (255, 140, 0)
 
-# Fonts
-title_font = pygame.font.Font(None, 60)
-score_font = pygame.font.Font(None, 500)
-winner_font = pygame.font.Font(None, 150)
-controls_font = pygame.font.Font(None, 40)
-footer_font = pygame.font.Font(None, 35)
+# ---------------------------------------------------------------------------
+# Fonts — created ONCE at startup, never inside the render loop
+# ---------------------------------------------------------------------------
+score_font       = pygame.font.Font(None, 500)
+title_mega_font  = pygame.font.Font(None, 400)
+press_start_font = pygame.font.Font(None, 80)
+over21_font      = pygame.font.Font(None, 140)
+ret_font         = pygame.font.Font(None, 160)
+sd_font          = pygame.font.Font(None, 220)
+msg_font2        = pygame.font.Font(None, 62)
+msg_font3        = pygame.font.Font(None, 60)
+declare_font_sm  = pygame.font.Font(None, 50)
+declare_font_md  = pygame.font.Font(None, 52)
+dw_font          = pygame.font.Font(None, 110)
+banner_font      = pygame.font.Font(None, 70)
+ctrl_font        = pygame.font.Font(None, 42)
+pop_font         = pygame.font.Font(None, 90)
+sub_font2        = pygame.font.Font(None, 46)
+cf_font          = pygame.font.Font(None, 130)
+skeech_font      = pygame.font.Font(None, 80)
 
-# Confetti particle class
-class Confetti:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.vx = random.uniform(-5, 5)
-        self.vy = random.uniform(-15, -5)
-        self.gravity = 0.5
-        self.color = random.choice([YELLOW, GREEN, (255, 100, 100), (100, 100, 255), (255, 150, 0)])
-        self.size = random.randint(5, 12)
-        self.rotation = random.uniform(0, 360)
-        self.rotation_speed = random.uniform(-10, 10)
-    
-    def update(self):
-        self.vy += self.gravity
-        self.x += self.vx
-        self.y += self.vy
-        self.rotation += self.rotation_speed
-    
-    def draw(self, surface):
-        points = []
-        for i in range(4):
-            angle = math.radians(self.rotation + i * 90)
-            px = self.x + math.cos(angle) * self.size
-            py = self.y + math.sin(angle) * self.size
-            points.append((px, py))
-        pygame.draw.polygon(surface, self.color, points)
+# ---------------------------------------------------------------------------
+# Pre-rendered static text surfaces — render() never called inside the loop
+# ---------------------------------------------------------------------------
+def _r(font, text, color):
+    return font.render(text, True, color)
 
+surf_press_start_play   = _r(press_start_font,  "Press Start To Play",           YELLOW)
+surf_press_again        = _r(press_start_font,  "Press Start To Play Again",     YELLOW)
+surf_over21             = _r(over21_font,        "You Went Over!",                ORANGE)
+surf_ret_title          = _r(ret_font,           "Retribution?",                  YELLOW)
+surf_white_gameover     = _r(msg_font2,          "White Button = Game Over",      WHITE)
+surf_black_retrib       = _r(msg_font2,          "Black Button = Retribution",    (20, 20, 20))
+surf_declare_banner_rw  = _r(declare_font_sm,    "Press Black to Declare Winner", WHITE)
+surf_declare_banner_sd  = _r(declare_font_md,    "Press Black to Declare Winner", WHITE)
+surf_dw_confirm         = _r(msg_font3,          "Black Button = Confirm",        (20, 20, 20))
+surf_dw_cancel          = _r(msg_font3,          "White Button = Cancel",         WHITE)
+surf_dw_skeech          = _r(msg_font3,          "Blue Button = Skeech",          BLUE)
+surf_edit_black_lbl     = _r(ctrl_font,          "Black = +1",                    (20, 20, 20))
+surf_edit_white_lbl     = _r(ctrl_font,          "White = -1",                    WHITE)
+surf_edit_p1_lbl        = _r(ctrl_font,          "P1 = Done",                     (180, 180, 255))
+surf_edit_blue_lbl      = _r(ctrl_font,          "Blue = Skeech",                 BLUE)
+surf_edit_blue_banner   = _r(banner_font,        "Edit Blue Score",               BLUE)
+surf_edit_red_banner    = _r(banner_font,        "Edit Red Score",                RED)
+surf_sc_press           = _r(sub_font2,          "Press ",                        WHITE)
+surf_sc_blue            = _r(sub_font2,          "Blue",                          BLUE)
+surf_sc_confirm         = _r(sub_font2,          " to confirm  or  ",             WHITE)
+surf_sc_white_word      = _r(sub_font2,          "White",                         (220, 220, 220))
+surf_sc_cancel          = _r(sub_font2,          " to cancel",                    WHITE)
+surf_sc_blue_title      = _r(pop_font,           "Blue Skeech?",                  BLUE)
+surf_sc_red_title       = _r(pop_font,           "Red Skeech?",                   RED)
+surf_quit_title         = _r(cf_font,            "Exit Game?",                    YELLOW)
+surf_quit_yes           = _r(msg_font2,          "White Button = Back to Menu",   WHITE)
+surf_quit_no            = _r(msg_font2,          "Black Button = Cancel",         (20, 20, 20))
+surf_quit_kill          = _r(msg_font2,          "Red Button = Kill App",         RED)
+surf_skeeched           = _r(skeech_font,        "You got Skeeched!",             YELLOW)
+
+SC_SUBLINE_W = (surf_sc_press.get_width()    + surf_sc_blue.get_width()     +
+                surf_sc_confirm.get_width()  + surf_sc_white_word.get_width() +
+                surf_sc_cancel.get_width())
+
+# Score digits 0–21 pre-rendered; add extras on demand
+_score_cache = {i: score_font.render(str(i), True, WHITE) for i in range(22)}
+
+def get_score_surf(n):
+    if n not in _score_cache:
+        _score_cache[n] = score_font.render(str(n), True, WHITE)
+    return _score_cache[n]
+
+# ---------------------------------------------------------------------------
+# Layout constants
+# ---------------------------------------------------------------------------
+header_height     = 20
+footer_height     = 20
+scoreboard_height = height - header_height - footer_height
+half_width        = width  // 2
+score_center_y    = header_height + scoreboard_height // 2
+
+_PAD_X, _PAD_Y, _ROW_GAP = 40, 24, 14
+
+# ---------------------------------------------------------------------------
+# Pre-built reusable surfaces
+# ---------------------------------------------------------------------------
+_overlay_surf = pygame.Surface((width, height), pygame.SRCALPHA)
+_overlay_surf.fill((20, 20, 20, 220))
+
+_grey_half = pygame.Surface((half_width, scoreboard_height))
+_grey_half.set_alpha(128)
+_grey_half.fill(GREY)
+
+_edit_grey = pygame.Surface((half_width, scoreboard_height), pygame.SRCALPHA)
+_edit_grey.fill((80, 80, 80, 180))
+
+def _alpha_bg(w, h, alpha=150):
+    s = pygame.Surface((w, h), pygame.SRCALPHA)
+    s.fill((0, 0, 0, alpha))
+    return s
+
+_bg_declare_rw = _alpha_bg(surf_declare_banner_rw.get_width() + 30,
+                            surf_declare_banner_rw.get_height() + 10)
+_bg_declare_sd = _alpha_bg(surf_declare_banner_sd.get_width() + 30,
+                            surf_declare_banner_sd.get_height() + 14, alpha=160)
+
+# Edit score bar
+_bar_h  = 54
+_bar_y  = height - footer_height - _bar_h - 6
+_seg_w  = width // 4
+_bar_bg = pygame.Surface((width, _bar_h))
+_bar_bg.fill((30, 30, 30))
+
+_seg_surfs = []
+for _col in [(200, 200, 200), (60, 60, 60), DARK_GREY, (230, 230, 255)]:
+    _s = pygame.Surface((_seg_w - 4, _bar_h - 4))
+    _s.fill(_col)
+    _seg_surfs.append(_s)
+
+# Banner background for edit mode
+_banner_bg_w = max(surf_edit_blue_banner.get_width(), surf_edit_red_banner.get_width()) + 40
+_banner_bg_h = surf_edit_blue_banner.get_height() + 16
+_banner_bg   = pygame.Surface((_banner_bg_w, _banner_bg_h))
+_banner_bg.fill((20, 20, 20))
+
+def _panel(w, h):
+    s = pygame.Surface((w, h))
+    s.fill((80, 85, 95))
+    s.set_alpha(235)
+    return s
+
+def _light_strip(w, h):
+    s = pygame.Surface((w, h))
+    s.fill((215, 215, 215))
+    return s
+
+def _dark_strip(w, h, color=(20, 30, 80)):
+    s = pygame.Surface((w, h))
+    s.fill(color)
+    return s
+
+# Retribution panel
+_ret_panel_w = max(surf_white_gameover.get_width(), surf_black_retrib.get_width()) + _PAD_X * 2
+_ret_row_h   = surf_white_gameover.get_height() + _PAD_Y
+_ret_panel_h = _ret_row_h * 2 + _PAD_Y + _ROW_GAP
+_ret_panel_x = width  // 2 - _ret_panel_w // 2
+_ret_panel_y = height // 2 - 10
+_ret_panel_s = _panel(_ret_panel_w, _ret_panel_h)
+_ret_strip   = _light_strip(_ret_panel_w - 6, _ret_row_h)
+
+# Declare Winner panel (3 rows: confirm / cancel / skeech)
+_dw_panel_w  = max(surf_dw_confirm.get_width(), surf_dw_cancel.get_width(),
+                   surf_dw_skeech.get_width()) + _PAD_X * 2
+_dw_row_h    = surf_dw_confirm.get_height() + _PAD_Y
+_dw_panel_h  = _dw_row_h * 3 + _PAD_Y * 2 + _ROW_GAP * 2
+_dw_panel_x  = width  // 2 - _dw_panel_w // 2
+_dw_panel_y  = height // 2 - 20
+_dw_panel_s  = _panel(_dw_panel_w, _dw_panel_h)
+_dw_strip1   = _light_strip(_dw_panel_w - 6, _dw_row_h)
+_dw_bstrip   = _dark_strip(_dw_panel_w - 6, _dw_row_h, (20, 30, 80))
+
+# Quit panel (3 rows: menu / cancel / kill)
+_quit_panel_w = max(surf_quit_yes.get_width(), surf_quit_no.get_width(),
+                    surf_quit_kill.get_width()) + _PAD_X * 2
+_quit_row_h   = surf_quit_yes.get_height() + _PAD_Y
+_quit_panel_h = _quit_row_h * 3 + _PAD_Y + _ROW_GAP * 2
+_quit_panel_x = width  // 2 - _quit_panel_w // 2
+_quit_panel_y = height // 2 - 10
+_quit_panel_s = _panel(_quit_panel_w, _quit_panel_h)
+_quit_strip_no   = _light_strip(_quit_panel_w - 6, _quit_row_h)
+_quit_strip_kill = _dark_strip(_quit_panel_w - 6, _quit_row_h, (60, 10, 10))
+
+# Skeech confirm popup
+_sc_pop_w  = max(surf_sc_blue_title.get_width(),
+                 surf_sc_red_title.get_width(), SC_SUBLINE_W) + 80
+_sc_pop_h  = 240
+_sc_pop_x  = width  // 2 - _sc_pop_w // 2
+_sc_pop_y  = height // 2 - _sc_pop_h // 2
+_sc_pop_s  = pygame.Surface((_sc_pop_w, _sc_pop_h), pygame.SRCALPHA)
+_sc_pop_s.fill((20, 20, 20, 240))
+
+# Winner "Press Start" box
+_psa_rect = surf_press_again.get_rect(center=(width // 2, height // 2 + 300))
+_pad      = 20
+_psa_box  = pygame.Rect(_psa_rect.x - _pad, _psa_rect.y - _pad,
+                         _psa_rect.width + _pad * 2, _psa_rect.height + _pad * 2)
+
+# ---------------------------------------------------------------------------
 # Game states
-STATE_WELCOME = "welcome"
-STATE_PLAYING = "playing"
-STATE_OVER_21 = "over_21"          # Pulsing "You Went Over" message
-STATE_RETRIBUTION = "retribution"  # "Retribution?" dialog
-STATE_RETRIBUTION_WAIT = "retribution_wait"  # Other player tries to reach 21
-STATE_SUDDEN_DEATH = "sudden_death"  # Both at 21 - flash "Sudden Death!"
-STATE_WINNER = "winner"
-STATE_DECLARE_WINNER = "declare_winner"  # Confirm declare-winner dialog
-STATE_CONFIRM_QUIT = "confirm_quit"      # Confirm before returning to welcome screen
-STATE_EDIT_SCORE = "edit_score"          # Edit score mode
-STATE_SKEECH_CONFIRM = "skeech_confirm"  # Skeech confirmation popup
+# ---------------------------------------------------------------------------
+STATE_WELCOME          = "welcome"
+STATE_PLAYING          = "playing"
+STATE_OVER_21          = "over_21"
+STATE_RETRIBUTION      = "retribution"
+STATE_RETRIBUTION_WAIT = "retribution_wait"
+STATE_SUDDEN_DEATH     = "sudden_death"
+STATE_WINNER           = "winner"
+STATE_DECLARE_WINNER   = "declare_winner"
+STATE_CONFIRM_QUIT     = "confirm_quit"
+STATE_EDIT_SCORE       = "edit_score"
+STATE_SKEECH_CONFIRM   = "skeech_confirm"
 
+# ---------------------------------------------------------------------------
+# GameState
+# ---------------------------------------------------------------------------
 class GameState:
     def __init__(self):
         self.player1_score = 0
         self.player2_score = 0
-        self.game_active = False
-        self.winner = None
+        self.game_active   = False
+        self.winner        = None
         self.score_history = []
-        self.pulse_time = 0
-        self.confetti = []
-        self.winner_announced_time = None
-        self.show_welcome = True
-        self.state = STATE_WELCOME
-
-        # Over-21 tracking
-        self.over21_player = None        # which player went over
-        self.over21_start_time = None    # when the over-21 message started
-
-        # Retribution tracking
-        self.retribution_player = None   # player who hit 21 first
-        self.retribution_start_time = None
-
-        # Sudden death
+        self.pulse_time    = 0.0
+        self.winner_announced_time   = None
+        self.state                   = STATE_WELCOME
+        self.over21_player           = None
+        self.over21_start_time       = None
+        self.retribution_player      = None
+        self.retribution_start_time  = None
         self.sudden_death_start_time = None
-
-        # Declare winner
-        self.declare_winner_player = None
-        self.pre_declare_state = None
-
-        # Quit confirmation
-        self.pre_quit_state = None
-
-        # Edit score mode
-        self.edit_player = None          # which player is being edited (1 or 2)
-        self.pre_edit_state = None       # state to return to after editing
-        self.skeech_winner = None        # set when a skeech win happens
+        self.declare_winner_player   = None
+        self.pre_declare_state       = None
+        self.pre_quit_state          = None
+        self.edit_player             = None
+        self.pre_edit_state          = None
+        self.skeech_winner           = None
 
     def go_to_welcome(self):
         self.__init__()
 
     def start_game(self):
-        self.player1_score = 0
-        self.player2_score = 0
-        self.game_active = True
-        self.winner = None
-        self.score_history = []
-        self.confetti = []
-        self.winner_announced_time = None
-        self.show_welcome = False
-        self.state = STATE_PLAYING
-        self.over21_player = None
-        self.over21_start_time = None
-        self.retribution_player = None
-        self.retribution_start_time = None
+        self.player1_score           = 0
+        self.player2_score           = 0
+        self.game_active             = True
+        self.winner                  = None
+        self.score_history           = []
+        self.winner_announced_time   = None
+        self.state                   = STATE_PLAYING
+        self.over21_player           = None
+        self.over21_start_time       = None
+        self.retribution_player      = None
+        self.retribution_start_time  = None
         self.sudden_death_start_time = None
-        self.declare_winner_player = None
-        self.pre_declare_state = None
-        self.edit_player = None
-        self.pre_edit_state = None
-        self.skeech_winner = None
+        self.declare_winner_player   = None
+        self.pre_declare_state       = None
+        self.edit_player             = None
+        self.pre_edit_state          = None
+        self.skeech_winner           = None
 
     def add_score(self, player, points):
         if self.state not in (STATE_PLAYING, STATE_RETRIBUTION_WAIT):
             return
-
         if player == 1:
-            self.score_history.append({
-                'player': 1,
-                'prev_score': self.player1_score,
-                'points': points
-            })
+            self.score_history.append({'player': 1, 'prev': self.player1_score})
             self.player1_score += points
         else:
-            self.score_history.append({
-                'player': 2,
-                'prev_score': self.player2_score,
-                'points': points
-            })
+            self.score_history.append({'player': 2, 'prev': self.player2_score})
             self.player2_score += points
-
         self.check_score(player)
 
     def check_score(self, player):
         score = self.player1_score if player == 1 else self.player2_score
-
         if score > 21:
-            # Over 21 - set score to 15 and show message
-            if player == 1:
-                self.player1_score = 15
-            else:
-                self.player2_score = 15
-            self.over21_player = player
+            if player == 1: self.player1_score = 15
+            else:           self.player2_score = 15
+            self.over21_player     = player
             self.over21_start_time = pygame.time.get_ticks()
-            self.state = STATE_OVER_21
-
+            self.state             = STATE_OVER_21
         elif score == 21:
             if self.state == STATE_RETRIBUTION_WAIT:
-                # Other player also hit 21 → Sudden Death
                 self.sudden_death_start_time = pygame.time.get_ticks()
                 self.state = STATE_SUDDEN_DEATH
             else:
-                # First player to hit 21 → ask for Retribution
-                self.retribution_player = player
+                self.retribution_player     = player
                 self.retribution_start_time = pygame.time.get_ticks()
-                self.state = STATE_RETRIBUTION
+                self.state                  = STATE_RETRIBUTION
 
     def undo(self):
-        if len(self.score_history) == 0:
+        if not self.score_history:
             return
-        last_move = self.score_history.pop()
-        if last_move['player'] == 1:
-            self.player1_score = last_move['prev_score']
-        else:
-            self.player2_score = last_move['prev_score']
-        self.winner = None
-        self.state = STATE_PLAYING
+        last = self.score_history.pop()
+        if last['player'] == 1: self.player1_score = last['prev']
+        else:                   self.player2_score = last['prev']
+        self.winner      = None
+        self.state       = STATE_PLAYING
         self.game_active = True
 
-    def spawn_confetti(self):
-        for _ in range(100):
-            x = random.randint(0, width)
-            y = random.randint(-100, height // 3)
-            self.confetti.append(Confetti(x, y))
+# ---------------------------------------------------------------------------
+# Draw helpers
+# ---------------------------------------------------------------------------
+def winner_text_color(pt):
+    return (int(127 + 127 * math.sin(pt * 3)),
+            int(127 + 127 * math.sin(pt * 3 + 2)),
+            int(127 + 127 * math.sin(pt * 3 + 4)))
 
-    def update_confetti(self):
-        for c in self.confetti[:]:
-            c.update()
-            if c.y > height + 50:
-                self.confetti.remove(c)
+def pulse_brightness(pt):
+    return 1.2 + 0.4 * abs(math.sin(pt * 2))
 
+def draw_glow(surface, text, font, color, cx, cy, glow_color, passes=4):
+    """Fast glow: render twice, blit 8 offset copies for halo, no Surface allocs."""
+    ts = font.render(text, True, color)
+    tr = ts.get_rect(center=(cx, cy))
+    gs = font.render(text, True, glow_color)
+    gs.set_alpha(80)
+    for dx, dy in ((-passes,0),(passes,0),(0,-passes),(0,passes),
+                   (-passes,-passes),(passes,passes),(-passes,passes),(passes,-passes)):
+        surface.blit(gs, (tr.x + dx, tr.y + dy))
+    surface.blit(ts, tr)
 
-def get_winner_text_scale(time_since_win):
-    if time_since_win < 500:
-        return 1.0 + 0.5 * (time_since_win / 500)
-    else:
-        bounce = abs(math.sin((time_since_win - 500) / 200))
-        return 1.5 + bounce * 0.3
+def draw_overlay():
+    screen.blit(_overlay_surf, (0, 0))
 
-def get_winner_text_color(pulse_time):
-    r = int(127 + 127 * math.sin(pulse_time * 3))
-    g = int(127 + 127 * math.sin(pulse_time * 3 + 2))
-    b = int(127 + 127 * math.sin(pulse_time * 3 + 4))
-    return (r, g, b)
+def bc(surf, cx, cy):   # blit centered
+    screen.blit(surf, surf.get_rect(center=(cx, cy)))
 
-def draw_text_centered(surface, text, font, color, x, y):
-    text_surface = font.render(text, True, color)
-    rect = text_surface.get_rect(center=(x, y))
-    surface.blit(text_surface, rect)
+def draw_panel(ps, px, py, pw, ph, border=WHITE):
+    screen.blit(ps, (px, py))
+    pygame.draw.rect(screen, border, pygame.Rect(px, py, pw, ph), width=3, border_radius=8)
 
-def draw_text(surface, text, font, color, x, y):
-    text_surface = font.render(text, True, color)
-    surface.blit(text_surface, (x, y))
+def draw_strip(strip_s, px, ry, pw, rh, border_col=(120, 120, 120)):
+    sr = pygame.Rect(px + 3, ry, pw - 6, rh)
+    screen.blit(strip_s, sr)
+    pygame.draw.rect(screen, border_col, sr, width=2, border_radius=5)
 
-def draw_glow_text(surface, text, font, color, x, y, glow_color, glow_amount=8):
-    text_surface = font.render(text, True, color)
-    text_rect = text_surface.get_rect(center=(x, y))
-    for offset in range(glow_amount, 0, -1):
-        alpha = 255 - (offset * 255 // glow_amount)
-        glow_size = offset * 2
-        glow_surface = pygame.Surface((text_surface.get_width() + glow_size * 2,
-                                       text_surface.get_height() + glow_size * 2),
-                                      pygame.SRCALPHA)
-        glow_text = font.render(text, True, glow_color)
-        glow_text.set_alpha(alpha)
-        glow_rect = glow_text.get_rect(center=(glow_surface.get_width() // 2,
-                                               glow_surface.get_height() // 2))
-        glow_surface.blit(glow_text, glow_rect)
-        glow_rect = glow_surface.get_rect(center=(x, y))
-        surface.blit(glow_surface, glow_rect)
-    surface.blit(text_surface, text_rect)
+def divider(px, dy, pw):
+    pygame.draw.line(screen, (140, 145, 155), (px + 20, dy), (px + pw - 20, dy), 1)
 
-def get_pulse_brightness(pulse_time):
-    return 1.2 + 0.4 * abs(math.sin(pulse_time * 2))
+# Winner font cache — avoid recreating the font when scale hasn't changed
+_wf_sz  = [0]
+_wf_obj = [pygame.font.Font(None, 110)]
 
-def draw_scoreboard(screen, game, width, height, header_height, footer_height, scoreboard_height, half_width):
-    """Draw the main scoreboard background and scores."""
-    # Determine colors for each side
+def get_winner_font(sz):
+    sz = max(40, sz)
+    if sz != _wf_sz[0]:
+        _wf_obj[0] = pygame.font.Font(None, sz)
+        _wf_sz[0]  = sz
+    return _wf_obj[0]
+
+# ---------------------------------------------------------------------------
+# Scoreboard
+# ---------------------------------------------------------------------------
+def draw_scoreboard(game, now):
+    pt = game.pulse_time
+
     if game.winner == 1:
-        p1_color = tuple(min(255, int(c * get_pulse_brightness(game.pulse_time))) for c in BLUE)
-        p2_color = GREY
+        br = pulse_brightness(pt)
+        p1 = tuple(min(255, int(c * br)) for c in BLUE)
+        p2 = GREY
     elif game.winner == 2:
-        p1_color = GREY
-        p2_color = tuple(min(255, int(c * get_pulse_brightness(game.pulse_time))) for c in RED)
+        br = pulse_brightness(pt)
+        p1 = GREY
+        p2 = tuple(min(255, int(c * br)) for c in RED)
     else:
-        p1_color = BLUE
-        p2_color = RED
+        p1, p2 = BLUE, RED
 
-    pygame.draw.rect(screen, p1_color, (0, header_height, half_width, scoreboard_height))
-    pygame.draw.rect(screen, p2_color, (half_width, header_height, half_width, scoreboard_height))
+    pygame.draw.rect(screen, p1, (0,          header_height, half_width, scoreboard_height))
+    pygame.draw.rect(screen, p2, (half_width, header_height, half_width, scoreboard_height))
 
-    if game.winner == 2:
-        overlay = pygame.Surface((half_width, scoreboard_height))
-        overlay.set_alpha(128)
-        overlay.fill(GREY)
-        screen.blit(overlay, (0, header_height))
-    elif game.winner == 1:
-        overlay = pygame.Surface((half_width, scoreboard_height))
-        overlay.set_alpha(128)
-        overlay.fill(GREY)
-        screen.blit(overlay, (half_width, header_height))
+    if   game.winner == 2: screen.blit(_grey_half, (0,          header_height))
+    elif game.winner == 1: screen.blit(_grey_half, (half_width, header_height))
 
-    pygame.draw.line(screen, BLACK, (half_width, header_height), (half_width, height - footer_height), 4)
+    pygame.draw.line(screen, BLACK,
+                     (half_width, header_height), (half_width, height - footer_height), 4)
 
-    # Winner text
-    if game.winner == 1:
-        time_since_win = pygame.time.get_ticks() - game.winner_announced_time
-        scale = get_winner_text_scale(time_since_win)
-        winner_color = get_winner_text_color(game.pulse_time)
-        scaled_font = pygame.font.Font(None, int(150 * scale))
-        draw_glow_text(screen, "WINNER", scaled_font, winner_color,
-                       half_width // 2, header_height + 220, YELLOW, glow_amount=8)
+    wcol = winner_text_color(pt)
 
-    draw_text_centered(screen, str(game.player1_score), score_font, WHITE,
-                       half_width // 2, header_height + scoreboard_height // 2)
+    if game.winner in (1, 2):
+        t     = now - game.winner_announced_time
+        scale = (1.0 + 0.5 * (t / 500)) if t < 500 else (1.5 + abs(math.sin((t - 500) / 200)) * 0.3)
+        sz    = min(int(110 * scale), int(half_width * 1.4))
+        cx    = half_width // 2 if game.winner == 1 else half_width + half_width // 2
+        draw_glow(screen, "WINNER", get_winner_font(sz), wcol,
+                  cx, score_center_y - 230, YELLOW, passes=4)
 
-    if game.winner == 2:
-        time_since_win = pygame.time.get_ticks() - game.winner_announced_time
-        scale = get_winner_text_scale(time_since_win)
-        winner_color = get_winner_text_color(game.pulse_time)
-        scaled_font = pygame.font.Font(None, int(150 * scale))
-        draw_glow_text(screen, "WINNER", scaled_font, winner_color,
-                       half_width + half_width // 2, header_height + 220, YELLOW, glow_amount=8)
+    s1 = get_score_surf(game.player1_score)
+    s2 = get_score_surf(game.player2_score)
+    screen.blit(s1, s1.get_rect(center=(half_width // 2,               score_center_y)))
+    screen.blit(s2, s2.get_rect(center=(half_width + half_width // 2,  score_center_y)))
 
-    draw_text_centered(screen, str(game.player2_score), score_font, WHITE,
-                       half_width + half_width // 2, header_height + scoreboard_height // 2)
+    pygame.draw.rect(screen, DARK_GREY, (0,     0,                   width, header_height))
+    pygame.draw.rect(screen, DARK_GREY, (0, height - footer_height,  width, footer_height))
 
-    # Header / Footer
-    pygame.draw.rect(screen, DARK_GREY, (0, 0, width, header_height))
-    pygame.draw.rect(screen, DARK_GREY, (0, height - footer_height, width, footer_height))
-
-
-def draw_overlay_box(screen, width, height, bg_color=(20, 20, 20), alpha=220):
-    overlay = pygame.Surface((width, height), pygame.SRCALPHA)
-    overlay.fill((*bg_color, alpha))
-    screen.blit(overlay, (0, 0))
-
-
+# ---------------------------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------------------------
 def main():
-    game = GameState()
-    clock = pygame.time.Clock()
+    game    = GameState()
+    clock   = pygame.time.Clock()
     running = True
-
-    header_height = 20
-    footer_height = 20
-    scoreboard_height = height - header_height - footer_height
-    half_width = width // 2
-
-    msg_font = pygame.font.Font(None, 120)
-    sub_font = pygame.font.Font(None, 70)
-    btn_font = pygame.font.Font(None, 80)
-
-    OVER21_DISPLAY_MS = 2000  # how long to show "You Went Over" before resuming
+    FPS     = 30          # 30 fps — halves CPU vs 60, plenty for a scoreboard
+    OVER21_MS = 2000
 
     while running:
         now = pygame.time.get_ticks()
+        dt  = clock.tick(FPS)
+        game.pulse_time += dt / 1000.0
+        pt = game.pulse_time
 
+        # ------------------------------------------------------------------ #
+        #  Events                                                              #
+        # ------------------------------------------------------------------ #
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
             elif event.type == pygame.JOYBUTTONDOWN:
-                print(f"Joystick {event.joy} Button {event.button} pressed")
+                joy, btn = event.joy, event.button
 
-                # Track quit-hold start
-                if event.joy == 2 and event.button == 9:
+                # ---- Quit trigger (always available) ----
+                if joy == 2 and btn == 9:
                     game.pre_quit_state = game.state
                     game.state = STATE_CONFIRM_QUIT
 
-                # ---- Enter Edit Score mode ----
-                elif event.joy == 2 and event.button == 5 and game.state in (STATE_PLAYING, STATE_RETRIBUTION_WAIT, STATE_SUDDEN_DEATH):
-                    game.edit_player = 1
-                    game.pre_edit_state = game.state
+                # ---- Enter Edit Score ----
+                elif joy == 2 and btn == 5 and game.state in (
+                        STATE_PLAYING, STATE_RETRIBUTION_WAIT, STATE_SUDDEN_DEATH):
+                    game.edit_player = 1; game.pre_edit_state = game.state
                     game.state = STATE_EDIT_SCORE
 
-                elif event.joy == 2 and event.button == 6 and game.state in (STATE_PLAYING, STATE_RETRIBUTION_WAIT, STATE_SUDDEN_DEATH):
-                    game.edit_player = 2
-                    game.pre_edit_state = game.state
+                elif joy == 2 and btn == 6 and game.state in (
+                        STATE_PLAYING, STATE_RETRIBUTION_WAIT, STATE_SUDDEN_DEATH):
+                    game.edit_player = 2; game.pre_edit_state = game.state
                     game.state = STATE_EDIT_SCORE
 
-                # ---- Edit Score mode controls ----
+                # ---- Edit Score controls ----
                 elif game.state == STATE_EDIT_SCORE:
-                    if event.joy == 2 and event.button == 4:    # Black = +1
-                        if game.edit_player == 1:
-                            game.player1_score += 1
-                        else:
-                            game.player2_score += 1
-                    elif event.joy == 2 and event.button == 8:  # White = -1
-                        if game.edit_player == 1:
-                            game.player1_score = max(0, game.player1_score - 1)
-                        else:
-                            game.player2_score = max(0, game.player2_score - 1)
-                    elif event.joy == 2 and event.button == 5:  # P1 = Done
+                    if   joy == 2 and btn == 4:   # Black = +1
+                        if game.edit_player == 1: game.player1_score += 1
+                        else:                     game.player2_score += 1
+                    elif joy == 2 and btn == 8:   # White = -1
+                        if game.edit_player == 1: game.player1_score = max(0, game.player1_score - 1)
+                        else:                     game.player2_score = max(0, game.player2_score - 1)
+                    elif joy == 2 and btn == 5:   # P1 = Done
                         game.state = game.pre_edit_state
-                        game.edit_player = None
-                        game.pre_edit_state = None
-                    elif event.joy == 2 and event.button == 7:  # Blue = Skeech
+                        game.edit_player = None; game.pre_edit_state = None
+                    elif joy == 2 and btn == 7:   # Blue = Skeech
                         game.state = STATE_SKEECH_CONFIRM
-                    # All other buttons do nothing in edit mode
+                    # all other buttons do nothing
 
-                # ---- Skeech confirmation popup ----
+                # ---- Skeech confirm ----
                 elif game.state == STATE_SKEECH_CONFIRM:
-                    if event.joy == 2 and event.button == 7:    # Blue = confirm skeech
-                        skeech_winner = game.edit_player
-                        game.winner = skeech_winner
-                        game.game_active = False
-                        game.winner_announced_time = now
-                        game.edit_player = None
-                        game.pre_edit_state = None
-                        game.skeech_winner = skeech_winner      # remember for "You got Skeeched" display
+                    if joy == 2 and btn == 7:     # Blue = confirm
+                        sw = game.edit_player
+                        game.winner = sw; game.skeech_winner = sw
+                        game.game_active = False; game.winner_announced_time = now
+                        game.edit_player = None; game.pre_edit_state = None
                         game.state = STATE_WINNER
-                    elif event.joy == 2 and event.button == 8:  # White = cancel
+                    elif joy == 2 and btn == 8:   # White = cancel
                         game.state = STATE_EDIT_SCORE
-                    # All other buttons do nothing
 
-                # ---- Confirm Quit dialog ----
+                # ---- Confirm Quit / Exit dialog ----
                 elif game.state == STATE_CONFIRM_QUIT:
-                    if event.joy == 2 and event.button == 8:   # White = Yes, go to welcome
+                    if   joy == 2 and btn == 8:   # White = back to menu
                         game.go_to_welcome()
-                    elif event.joy == 2 and event.button == 4: # Black = No, cancel
+                    elif joy == 2 and btn == 4:   # Black = cancel
                         game.state = game.pre_quit_state
-                    elif event.joy == 1 and event.button == 2: # Red = Kill app completely
+                    elif joy == 1 and btn == 2:   # Red = kill app completely
                         pygame.quit()
                         sys.exit()
 
-                # ---- Declare Winner confirm dialog ----
+                # ---- Declare Winner dialog ----
                 elif game.state == STATE_DECLARE_WINNER:
-                    if event.joy == 2 and event.button == 4:   # Black = confirm
+                    if   joy == 2 and btn == 4:   # Black = confirm
                         game.winner = game.declare_winner_player
-                        game.game_active = False
-                        game.winner_announced_time = now
-                        game.declare_winner_player = None
-                        game.state = STATE_WINNER
-                    elif event.joy == 2 and event.button == 8: # White = cancel
+                        game.game_active = False; game.winner_announced_time = now
+                        game.declare_winner_player = None; game.state = STATE_WINNER
+                    elif joy == 2 and btn == 8:   # White = cancel
                         game.state = game.pre_declare_state
                         game.declare_winner_player = None
-
-                elif event.joy == 2 and event.button == 3:
-                    game.start_game()
-
-                # ---- Retribution dialog: White=game over, Black=retribution ----
-                elif game.state == STATE_RETRIBUTION:
-                    if event.joy == 2 and event.button == 8:
-                        # White → current player wins (game over)
-                        game.winner = game.retribution_player
-                        game.game_active = False
-                        game.winner_announced_time = now
-                        game.state = STATE_WINNER
-                    elif event.joy == 2 and event.button == 4:
-                        # Black → other player gets a chance
-                        game.state = STATE_RETRIBUTION_WAIT
-                        game.game_active = True
-
-                # ---- Retribution Wait: Black declare = declare retribution player winner ----
-                elif game.state == STATE_RETRIBUTION_WAIT:
-                    if event.joy == 2 and event.button == 4:   # Black = declare winner
-                        game.declare_winner_player = game.retribution_player
-                        game.pre_declare_state = STATE_RETRIBUTION_WAIT
-                        game.state = STATE_DECLARE_WINNER
-                    # Normal scoring still works during retribution wait
-                    elif event.joy == 0 and event.button == 0:
-                        game.add_score(1, 1)
-                    elif event.joy == 0 and event.button == 1:
-                        game.add_score(1, 3)
-                    elif event.joy == 0 and event.button == 2:
-                        game.add_score(1, 5)
-                    elif event.joy == 0 and event.button == 10:
-                        game.add_score(1, 3)
-                    elif event.joy == 0 and event.button == 11:
-                        game.add_score(1, 1)
-                    elif event.joy == 1 and event.button == 0:
-                        game.add_score(2, 1)
-                    elif event.joy == 1 and event.button == 1:
-                        game.add_score(2, 3)
-                    elif event.joy == 1 and event.button == 2:
-                        game.add_score(2, 5)
-                    elif event.joy == 1 and event.button == 10:
-                        game.add_score(2, 3)
-                    elif event.joy == 1 and event.button == 11:
-                        game.add_score(2, 1)
-
-                # ---- Sudden Death: Black declare = declare leading player winner ----
-                elif game.state == STATE_SUDDEN_DEATH:
-                    if event.joy == 2 and event.button == 4:
-                        if game.player1_score > game.player2_score:
-                            leading = 1
-                        elif game.player2_score > game.player1_score:
-                            leading = 2
+                    elif joy == 2 and btn == 7:   # Blue = Skeech
+                        # player attempting retribution (opponent of retribution_player) wins
+                        if game.retribution_player is not None:
+                            sw = 2 if game.retribution_player == 1 else 1
                         else:
-                            leading = 1  # tie: default to player 1 / Blue
-                        game.declare_winner_player = leading
-                        game.pre_declare_state = STATE_SUDDEN_DEATH
-                        game.state = STATE_DECLARE_WINNER
+                            sw = game.declare_winner_player
+                        game.winner = sw; game.skeech_winner = sw
+                        game.game_active = False; game.winner_announced_time = now
+                        game.declare_winner_player = None; game.state = STATE_WINNER
 
-                # ---- Normal gameplay ----
-                elif game.state == STATE_PLAYING:
-                    if event.joy == 0 and event.button == 0:
-                        game.add_score(1, 1)
-                    elif event.joy == 0 and event.button == 1:
-                        game.add_score(1, 3)
-                    elif event.joy == 0 and event.button == 2:
-                        game.add_score(1, 5)
-                    elif event.joy == 0 and event.button == 10:
-                        game.add_score(1, 3)
-                    elif event.joy == 0 and event.button == 11:
-                        game.add_score(1, 1)
-                    elif event.joy == 1 and event.button == 0:
-                        game.add_score(2, 1)
-                    elif event.joy == 1 and event.button == 1:
-                        game.add_score(2, 3)
-                    elif event.joy == 1 and event.button == 2:
-                        game.add_score(2, 5)
-                    elif event.joy == 1 and event.button == 10:
-                        game.add_score(2, 3)
-                    elif event.joy == 1 and event.button == 11:
-                        game.add_score(2, 1)
-
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    game.pre_quit_state = game.state
-                    game.state = STATE_CONFIRM_QUIT
-
-                # ---- Confirm Quit dialog (keyboard) ----
-                elif game.state == STATE_CONFIRM_QUIT:
-                    if event.key == pygame.K_y:
-                        game.go_to_welcome()
-                    elif event.key == pygame.K_n:
-                        game.state = game.pre_quit_state
-
-                elif event.key == pygame.K_SPACE:
+                # ---- Start game ----
+                elif joy == 2 and btn == 3:
                     game.start_game()
-                elif event.key == pygame.K_BACKSPACE:
-                    game.undo()
 
-                # ---- Declare Winner confirm (keyboard) ----
-                elif game.state == STATE_DECLARE_WINNER:
-                    if event.key == pygame.K_RETURN:
-                        game.winner = game.declare_winner_player
-                        game.game_active = False
-                        game.winner_announced_time = now
-                        game.declare_winner_player = None
-                        game.state = STATE_WINNER
-                    elif event.key == pygame.K_x:
-                        game.state = game.pre_declare_state
-                        game.declare_winner_player = None
-
-                # ---- Retribution dialog keyboard: N = No, Y = Yes ----
+                # ---- Retribution dialog ----
                 elif game.state == STATE_RETRIBUTION:
-                    if event.key == pygame.K_n:
+                    if   joy == 2 and btn == 8:   # White = game over, first player wins
                         game.winner = game.retribution_player
-                        game.game_active = False
-                        game.winner_announced_time = now
+                        game.game_active = False; game.winner_announced_time = now
                         game.state = STATE_WINNER
-                    elif event.key == pygame.K_y:
-                        game.state = STATE_RETRIBUTION_WAIT
-                        game.game_active = True
+                    elif joy == 2 and btn == 4:   # Black = allow retribution attempt
+                        game.state = STATE_RETRIBUTION_WAIT; game.game_active = True
 
-                # ---- Retribution Wait: D = declare winner ----
+                # ---- Retribution Wait ----
                 elif game.state == STATE_RETRIBUTION_WAIT:
-                    if event.key == pygame.K_d:
+                    if joy == 2 and btn == 4:
                         game.declare_winner_player = game.retribution_player
                         game.pre_declare_state = STATE_RETRIBUTION_WAIT
                         game.state = STATE_DECLARE_WINNER
-                    elif event.key == pygame.K_q:
-                        game.add_score(1, 1)
-                    elif event.key == pygame.K_w:
-                        game.add_score(1, 3)
-                    elif event.key == pygame.K_e:
-                        game.add_score(1, 5)
-                    elif event.key == pygame.K_i:
-                        game.add_score(2, 1)
-                    elif event.key == pygame.K_o:
-                        game.add_score(2, 3)
-                    elif event.key == pygame.K_p:
-                        game.add_score(2, 5)
+                    elif joy == 0 and btn == 0:   game.add_score(1, 1)
+                    elif joy == 0 and btn == 1:   game.add_score(1, 3)
+                    elif joy == 0 and btn == 2:   game.add_score(1, 5)
+                    elif joy == 0 and btn == 10:  game.add_score(1, 3)
+                    elif joy == 0 and btn == 11:  game.add_score(1, 1)
+                    elif joy == 1 and btn == 0:   game.add_score(2, 1)
+                    elif joy == 1 and btn == 1:   game.add_score(2, 3)
+                    elif joy == 1 and btn == 2:   game.add_score(2, 5)
+                    elif joy == 1 and btn == 10:  game.add_score(2, 3)
+                    elif joy == 1 and btn == 11:  game.add_score(2, 1)
 
-                # ---- Sudden Death: D = declare winner ----
+                # ---- Sudden Death ----
                 elif game.state == STATE_SUDDEN_DEATH:
-                    if event.key == pygame.K_d:
+                    if joy == 2 and btn == 4:
                         leading = 1 if game.player1_score >= game.player2_score else 2
                         game.declare_winner_player = leading
                         game.pre_declare_state = STATE_SUDDEN_DEATH
@@ -571,361 +551,219 @@ def main():
 
                 # ---- Normal gameplay ----
                 elif game.state == STATE_PLAYING:
-                    if event.key == pygame.K_q:
-                        game.add_score(1, 1)
-                    elif event.key == pygame.K_w:
-                        game.add_score(1, 3)
-                    elif event.key == pygame.K_e:
-                        game.add_score(1, 5)
-                    elif event.key == pygame.K_i:
-                        game.add_score(2, 1)
-                    elif event.key == pygame.K_o:
-                        game.add_score(2, 3)
-                    elif event.key == pygame.K_p:
-                        game.add_score(2, 5)
+                    if   joy == 0 and btn == 0:   game.add_score(1, 1)
+                    elif joy == 0 and btn == 1:   game.add_score(1, 3)
+                    elif joy == 0 and btn == 2:   game.add_score(1, 5)
+                    elif joy == 0 and btn == 10:  game.add_score(1, 3)
+                    elif joy == 0 and btn == 11:  game.add_score(1, 1)
+                    elif joy == 1 and btn == 0:   game.add_score(2, 1)
+                    elif joy == 1 and btn == 1:   game.add_score(2, 3)
+                    elif joy == 1 and btn == 2:   game.add_score(2, 5)
+                    elif joy == 1 and btn == 10:  game.add_score(2, 3)
+                    elif joy == 1 and btn == 11:  game.add_score(2, 1)
 
-        # ---- Auto-transitions ----
+            elif event.type == pygame.KEYDOWN:
+                key = event.key
+                if key == pygame.K_ESCAPE:
+                    game.pre_quit_state = game.state; game.state = STATE_CONFIRM_QUIT
+                elif game.state == STATE_CONFIRM_QUIT:
+                    if   key == pygame.K_y: game.go_to_welcome()
+                    elif key == pygame.K_n: game.state = game.pre_quit_state
+                    elif key == pygame.K_k: pygame.quit(); sys.exit()
+                elif key == pygame.K_SPACE:     game.start_game()
+                elif key == pygame.K_BACKSPACE: game.undo()
+                elif game.state == STATE_DECLARE_WINNER:
+                    if   key == pygame.K_RETURN:
+                        game.winner = game.declare_winner_player; game.game_active = False
+                        game.winner_announced_time = now; game.declare_winner_player = None
+                        game.state = STATE_WINNER
+                    elif key == pygame.K_x:
+                        game.state = game.pre_declare_state; game.declare_winner_player = None
+                elif game.state == STATE_RETRIBUTION:
+                    if   key == pygame.K_n:
+                        game.winner = game.retribution_player; game.game_active = False
+                        game.winner_announced_time = now; game.state = STATE_WINNER
+                    elif key == pygame.K_y:
+                        game.state = STATE_RETRIBUTION_WAIT; game.game_active = True
+                elif game.state == STATE_RETRIBUTION_WAIT:
+                    if   key == pygame.K_d:
+                        game.declare_winner_player = game.retribution_player
+                        game.pre_declare_state = STATE_RETRIBUTION_WAIT; game.state = STATE_DECLARE_WINNER
+                    elif key == pygame.K_q: game.add_score(1, 1)
+                    elif key == pygame.K_w: game.add_score(1, 3)
+                    elif key == pygame.K_e: game.add_score(1, 5)
+                    elif key == pygame.K_i: game.add_score(2, 1)
+                    elif key == pygame.K_o: game.add_score(2, 3)
+                    elif key == pygame.K_p: game.add_score(2, 5)
+                elif game.state == STATE_SUDDEN_DEATH:
+                    if key == pygame.K_d:
+                        leading = 1 if game.player1_score >= game.player2_score else 2
+                        game.declare_winner_player = leading
+                        game.pre_declare_state = STATE_SUDDEN_DEATH; game.state = STATE_DECLARE_WINNER
+                elif game.state == STATE_PLAYING:
+                    if   key == pygame.K_q: game.add_score(1, 1)
+                    elif key == pygame.K_w: game.add_score(1, 3)
+                    elif key == pygame.K_e: game.add_score(1, 5)
+                    elif key == pygame.K_i: game.add_score(2, 1)
+                    elif key == pygame.K_o: game.add_score(2, 3)
+                    elif key == pygame.K_p: game.add_score(2, 5)
 
-        # Over-21: after display time, resume play
-        if game.state == STATE_OVER_21:
-            if now - game.over21_start_time >= OVER21_DISPLAY_MS:
-                game.state = STATE_PLAYING
-                game.over21_player = None
-                game.over21_start_time = None
+        # ------------------------------------------------------------------ #
+        #  Auto-transitions                                                    #
+        # ------------------------------------------------------------------ #
+        if game.state == STATE_OVER_21 and now - game.over21_start_time >= OVER21_MS:
+            game.state = STATE_PLAYING; game.over21_player = None; game.over21_start_time = None
 
-        # Sudden Death: after 7 seconds, reset both scores to 0
-        if game.state == STATE_SUDDEN_DEATH:
-            if now - game.sudden_death_start_time >= 5000:
-                game.player1_score = 0
-                game.player2_score = 0
-                game.retribution_player = None
-                game.state = STATE_PLAYING
+        if game.state == STATE_SUDDEN_DEATH and now - game.sudden_death_start_time >= 5000:
+            game.player1_score = 0; game.player2_score = 0
+            game.retribution_player = None; game.state = STATE_PLAYING
 
-        # Update pulse
-        game.pulse_time += clock.get_time() / 1000.0
-
-        # ---- RENDER ----
+        # ------------------------------------------------------------------ #
+        #  Render                                                              #
+        # ------------------------------------------------------------------ #
         screen.fill(BLACK)
 
-        # Welcome screen
+        # ===== WELCOME =====
         if game.state == STATE_WELCOME:
-            title_mega_font = pygame.font.Font(None, 400)
-            draw_glow_text(screen, "SKEECH", title_mega_font, WHITE, width // 2, height // 2 - 100, YELLOW, glow_amount=10)
-            press_start_font = pygame.font.Font(None, 80)
-            pulse_alpha = int(200 + 55 * math.sin(game.pulse_time * 3))
-            press_start_text = press_start_font.render("Press Start To Play", True, YELLOW)
-            press_start_text.set_alpha(pulse_alpha)
-            rect = press_start_text.get_rect(center=(width // 2, height // 2 + 150))
-            screen.blit(press_start_text, rect)
+            draw_glow(screen, "SKEECH", title_mega_font, WHITE,
+                      width // 2, height // 2 - 100, YELLOW, passes=4)
+            surf_press_start_play.set_alpha(int(200 + 55 * math.sin(pt * 3)))
+            bc(surf_press_start_play, width // 2, height // 2 + 150)
             pygame.display.flip()
-            clock.tick(60)
             continue
 
-        # Draw the base scoreboard
-        draw_scoreboard(screen, game, width, height, header_height, footer_height, scoreboard_height, half_width)
+        # ===== SCOREBOARD BASE =====
+        draw_scoreboard(game, now)
 
-        # ---- STATE-SPECIFIC OVERLAYS ----
+        # ===== STATE OVERLAYS =====
+        cx = width // 2
 
         if game.state == STATE_OVER_21:
-            # Semi-transparent dark overlay
-            draw_overlay_box(screen, width, height)
-            elapsed = now - game.over21_start_time
-            pulse_alpha = int(180 + 75 * math.sin(elapsed / 120.0))
-            over_font = pygame.font.Font(None, 140)
-            over_surf = over_font.render("You Went Over!", True, ORANGE)
-            over_surf.set_alpha(pulse_alpha)
-            over_rect = over_surf.get_rect(center=(width // 2, height // 2 - 60))
-            screen.blit(over_surf, over_rect)
-
-            #sub_surf = sub_font.render(f"Player {game.over21_player} score reset to 15", True, WHITE)
-            #sub_surf.set_alpha(pulse_alpha)
-            #sub_rect = sub_surf.get_rect(center=(width // 2, height // 2 + 60))
-            #screen.blit(sub_surf, sub_rect)
+            draw_overlay()
+            surf_over21.set_alpha(int(180 + 75 * math.sin((now - game.over21_start_time) / 120.0)))
+            bc(surf_over21, cx, height // 2 - 60)
 
         elif game.state == STATE_RETRIBUTION:
-            draw_overlay_box(screen, width, height)
+            draw_overlay()
+            surf_ret_title.set_alpha(int(200 + 55 * math.sin(pt * 4)))
+            bc(surf_ret_title, cx, height // 2 - 130)
 
-            # Pulsing "Retribution?" title
-            ret_font = pygame.font.Font(None, 160)
-            pulse_alpha = int(200 + 55 * math.sin(game.pulse_time * 4))
-            ret_surf = ret_font.render("Retribution?", True, YELLOW)
-            ret_surf.set_alpha(pulse_alpha)
-            screen.blit(ret_surf, ret_surf.get_rect(center=(width // 2, height // 2 - 130)))
-
-            # Stacked message panel
-            msg_font2 = pygame.font.Font(None, 62)
-            white_surf = msg_font2.render("White Button = Game Over",   True, WHITE)
-            black_surf = msg_font2.render("Black Button = Retribution", True, (20, 20, 20))
-
-            pad_x, pad_y, row_gap = 40, 24, 14
-            panel_w = max(white_surf.get_width(), black_surf.get_width()) + pad_x * 2
-            panel_h = white_surf.get_height() + black_surf.get_height() + pad_y * 2 + row_gap
-            panel_x = width  // 2 - panel_w // 2
-            panel_y = height // 2 - 10
-
-            panel_surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-            panel_surf.fill((80, 85, 95, 235))
-            screen.blit(panel_surf, (panel_x, panel_y))
-            pygame.draw.rect(screen, WHITE, pygame.Rect(panel_x, panel_y, panel_w, panel_h), width=3, border_radius=8)
-
-            row1_y = panel_y + pad_y
-            screen.blit(white_surf, white_surf.get_rect(center=(width // 2, row1_y + white_surf.get_height() // 2)))
-
-            div_y = row1_y + white_surf.get_height() + row_gap // 2
-            pygame.draw.line(screen, (140, 145, 155), (panel_x + 20, div_y), (panel_x + panel_w - 20, div_y), 1)
-
-            row2_y = div_y + row_gap // 2
-            strip_h = black_surf.get_height() + pad_y
-            strip = pygame.Surface((panel_w - 6, strip_h), pygame.SRCALPHA)
-            strip.fill((215, 215, 215, 250))
-            strip_rect = pygame.Rect(panel_x + 3, row2_y, panel_w - 6, strip_h)
-            screen.blit(strip, strip_rect)
-            pygame.draw.rect(screen, (120, 120, 120), strip_rect, width=2, border_radius=5)
-            screen.blit(black_surf, black_surf.get_rect(center=(width // 2, row2_y + strip_h // 2)))
+            draw_panel(_ret_panel_s, _ret_panel_x, _ret_panel_y, _ret_panel_w, _ret_panel_h)
+            row1_y = _ret_panel_y + _PAD_Y
+            bc(surf_white_gameover, cx, row1_y + _ret_row_h // 2)
+            div_y = row1_y + _ret_row_h + _ROW_GAP // 2
+            divider(_ret_panel_x, div_y, _ret_panel_w)
+            row2_y = div_y + _ROW_GAP // 2
+            draw_strip(_ret_strip, _ret_panel_x, row2_y, _ret_panel_w, _ret_row_h)
+            bc(surf_black_retrib, cx, row2_y + _ret_row_h // 2)
 
         elif game.state == STATE_RETRIBUTION_WAIT:
-            # Banner telling the other player to try for 21
-            # other_player = 2 if game.retribution_player == 1 else 1
-            # banner_font = pygame.font.Font(None, 70)
-            # pulse_alpha = int(180 + 75 * math.sin(game.pulse_time * 3))
-            # banner_surf = banner_font.render(f"Player {other_player}: Score 21 for Retribution!", True, YELLOW)
-            # banner_surf.set_alpha(pulse_alpha)
-            # banner_rect = banner_surf.get_rect(center=(width // 2, height - footer_height - 80))
-            # pad = 18
-            # bg_rect = banner_rect.inflate(pad * 2, pad * 2)
-            # bg_surf = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
-            # bg_surf.fill((0, 0, 0, 170))
-            # screen.blit(bg_surf, bg_rect.topleft)
-            # screen.blit(banner_surf, banner_rect)
-
-            # "Press Black to Declare Winner" banner below
-            declare_font = pygame.font.Font(None, 50)
-            pulse_alpha2 = int(160 + 75 * math.sin(game.pulse_time * 2.5 + 1))
-            declare_surf = declare_font.render("Press Black to Declare Winner", True, WHITE)
-            declare_surf.set_alpha(pulse_alpha2)
-            declare_rect = declare_surf.get_rect(center=(width // 2, height - footer_height - 30))
-            bg_declare = pygame.Surface((declare_rect.width + 30, declare_rect.height + 10), pygame.SRCALPHA)
-            bg_declare.fill((0, 0, 0, 150))
-            screen.blit(bg_declare, bg_declare.get_rect(center=declare_rect.center))
-            screen.blit(declare_surf, declare_rect)
+            surf_declare_banner_rw.set_alpha(int(160 + 75 * math.sin(pt * 2.5 + 1)))
+            drect = surf_declare_banner_rw.get_rect(center=(cx, height - footer_height - 30))
+            screen.blit(_bg_declare_rw, _bg_declare_rw.get_rect(center=drect.center))
+            screen.blit(surf_declare_banner_rw, drect)
 
         elif game.state == STATE_SUDDEN_DEATH:
             elapsed = now - game.sudden_death_start_time
-            draw_overlay_box(screen, width, height, bg_color=(0, 0, 0), alpha=200)
-            sd_font = pygame.font.Font(None, 220)
-            pulse_alpha = int(160 + 95 * math.sin(elapsed / 150.0))
-            sd_color = get_winner_text_color(game.pulse_time)
-            sd_surf = sd_font.render("SUDDEN DEATH!", True, sd_color)
-            sd_surf.set_alpha(pulse_alpha)
-            sd_rect = sd_surf.get_rect(center=(width // 2, height // 2 - 60))
-            screen.blit(sd_surf, sd_rect)
-
-            remaining = max(0, 7 - (elapsed // 1000))
-            #countdown_surf = sub_font.render(f"Both reset to 0 in {remaining}...", True, WHITE)
-            #countdown_rect = countdown_surf.get_rect(center=(width // 2, height // 2 + 60))
-            #screen.blit(countdown_surf, countdown_rect)
-
-            # "Press Black to Declare Winner" banner
-            declare_font = pygame.font.Font(None, 52)
-            pulse_alpha2 = int(180 + 75 * math.sin(game.pulse_time * 2.5))
-            declare_surf = declare_font.render("Press Black to Declare Winner", True, WHITE)
-            declare_surf.set_alpha(pulse_alpha2)
-            declare_rect = declare_surf.get_rect(center=(width // 2, height - footer_height - 40))
-            bg_declare = pygame.Surface((declare_rect.width + 30, declare_rect.height + 14), pygame.SRCALPHA)
-            bg_declare.fill((0, 0, 0, 160))
-            screen.blit(bg_declare, bg_declare.get_rect(center=declare_rect.center))
-            screen.blit(declare_surf, declare_rect)
+            draw_overlay()
+            sd_col = winner_text_color(pt)
+            sd_s   = sd_font.render("SUDDEN DEATH!", True, sd_col)
+            sd_s.set_alpha(int(160 + 95 * math.sin(elapsed / 150.0)))
+            bc(sd_s, cx, height // 2 - 60)
+            surf_declare_banner_sd.set_alpha(int(180 + 75 * math.sin(pt * 2.5)))
+            drect = surf_declare_banner_sd.get_rect(center=(cx, height - footer_height - 40))
+            screen.blit(_bg_declare_sd, _bg_declare_sd.get_rect(center=drect.center))
+            screen.blit(surf_declare_banner_sd, drect)
 
         elif game.state == STATE_DECLARE_WINNER:
-            draw_overlay_box(screen, width, height)
-            player_name = "Blue" if game.declare_winner_player == 1 else "Red"
-            name_color  = BLUE   if game.declare_winner_player == 1 else RED
+            draw_overlay()
+            pname = "Blue" if game.declare_winner_player == 1 else "Red"
+            pcol  = BLUE   if game.declare_winner_player == 1 else RED
+            dw_s  = dw_font.render(f"Declare {pname} Winner?", True, pcol)
+            dw_s.set_alpha(int(200 + 55 * math.sin(pt * 4)))
+            bc(dw_s, cx, height // 2 - 110)
 
-            dw_font = pygame.font.Font(None, 110)
-            pulse_alpha = int(200 + 55 * math.sin(game.pulse_time * 4))
-            dw_surf = dw_font.render(f"Declare {player_name} Winner?", True, name_color)
-            dw_surf.set_alpha(pulse_alpha)
-            screen.blit(dw_surf, dw_surf.get_rect(center=(width // 2, height // 2 - 80)))
-
-            msg_font3   = pygame.font.Font(None, 60)
-            conf_surf   = msg_font3.render("Black Button = Confirm", True, (20, 20, 20))
-            cancel_surf = msg_font3.render("White Button = Cancel",  True, WHITE)
-
-            pad_x, pad_y, row_gap = 40, 24, 14
-            panel_w = max(conf_surf.get_width(), cancel_surf.get_width()) + pad_x * 2
-            panel_h = conf_surf.get_height() + cancel_surf.get_height() + pad_y * 2 + row_gap
-            panel_x = width  // 2 - panel_w // 2
-            panel_y = height // 2 + 20
-
-            panel_surf2 = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-            panel_surf2.fill((80, 85, 95, 235))
-            screen.blit(panel_surf2, (panel_x, panel_y))
-            pygame.draw.rect(screen, WHITE, pygame.Rect(panel_x, panel_y, panel_w, panel_h), width=3, border_radius=8)
-
-            # Row 1: Black = confirm on light strip
-            row1_y = panel_y + pad_y
-            strip1_h = conf_surf.get_height() + pad_y
-            strip1 = pygame.Surface((panel_w - 6, strip1_h), pygame.SRCALPHA)
-            strip1.fill((215, 215, 215, 250))
-            strip1_rect = pygame.Rect(panel_x + 3, row1_y, panel_w - 6, strip1_h)
-            screen.blit(strip1, strip1_rect)
-            pygame.draw.rect(screen, (120, 120, 120), strip1_rect, width=2, border_radius=5)
-            screen.blit(conf_surf, conf_surf.get_rect(center=(width // 2, row1_y + strip1_h // 2)))
-
-            div_y = row1_y + strip1_h + row_gap // 2
-            pygame.draw.line(screen, (140, 145, 155), (panel_x + 20, div_y), (panel_x + panel_w - 20, div_y), 1)
-
-            # Row 2: White = cancel on dark background
-            row2_y = div_y + row_gap // 2
-            screen.blit(cancel_surf, cancel_surf.get_rect(center=(width // 2, row2_y + cancel_surf.get_height() // 2 + 8)))
+            draw_panel(_dw_panel_s, _dw_panel_x, _dw_panel_y, _dw_panel_w, _dw_panel_h)
+            row1_y = _dw_panel_y + _PAD_Y
+            draw_strip(_dw_strip1, _dw_panel_x, row1_y, _dw_panel_w, _dw_row_h)
+            bc(surf_dw_confirm, cx, row1_y + _dw_row_h // 2)
+            div1_y = row1_y + _dw_row_h + _ROW_GAP // 2
+            divider(_dw_panel_x, div1_y, _dw_panel_w)
+            row2_y = div1_y + _ROW_GAP // 2
+            bc(surf_dw_cancel, cx, row2_y + _dw_row_h // 2)
+            div2_y = row2_y + _dw_row_h + _ROW_GAP // 2
+            divider(_dw_panel_x, div2_y, _dw_panel_w)
+            row3_y = div2_y + _ROW_GAP // 2
+            draw_strip(_dw_bstrip, _dw_panel_x, row3_y, _dw_panel_w, _dw_row_h, border_col=BLUE)
+            bc(surf_dw_skeech, cx, row3_y + _dw_row_h // 2)
 
         elif game.state == STATE_WINNER:
-            press_start_font = pygame.font.Font(None, 80)
-            pulse_alpha = int(200 + 55 * math.sin(game.pulse_time * 3))
-            press_start_text = press_start_font.render("Press Start To Play Again", True, YELLOW)
-            press_start_text.set_alpha(pulse_alpha)
-            rect = press_start_text.get_rect(center=(width // 2, height // 2 + 300))
-            padding = 20
-            box_rect = pygame.Rect(rect.x - padding, rect.y - padding, rect.width + padding * 2, rect.height + padding * 2)
-            pygame.draw.rect(screen, BLACK, box_rect)
-            pygame.draw.rect(screen, YELLOW, box_rect, 3)
-            screen.blit(press_start_text, rect)
-
-            # If this was a skeech win, show "You got Skeeched!" on loser side
-            if hasattr(game, 'skeech_winner') and game.skeech_winner is not None:
-                loser_side_x = (half_width + half_width // 2) if game.skeech_winner == 1 else half_width // 2
-                skeech_font = pygame.font.Font(None, 80)
-                skeech_pulse = int(200 + 55 * math.sin(game.pulse_time * 3.5))
-                skeech_surf = skeech_font.render("You got Skeeched!", True, YELLOW)
-                skeech_surf.set_alpha(skeech_pulse)
-                screen.blit(skeech_surf, skeech_surf.get_rect(center=(loser_side_x, header_height + scoreboard_height // 2 + 100)))
+            surf_press_again.set_alpha(int(200 + 55 * math.sin(pt * 3)))
+            pygame.draw.rect(screen, BLACK,  _psa_box)
+            pygame.draw.rect(screen, YELLOW, _psa_box, 3)
+            screen.blit(surf_press_again, _psa_rect)
+            if game.skeech_winner is not None:
+                lx = (half_width + half_width // 2) if game.skeech_winner == 1 else half_width // 2
+                surf_skeeched.set_alpha(int(200 + 55 * math.sin(pt * 3.5)))
+                bc(surf_skeeched, lx, score_center_y + 200)
 
         elif game.state in (STATE_EDIT_SCORE, STATE_SKEECH_CONFIRM):
-            # Grey out the non-edited player's side
             edit_p = game.edit_player
-            grey_x = half_width if edit_p == 1 else 0
-            grey_overlay = pygame.Surface((half_width, scoreboard_height), pygame.SRCALPHA)
-            grey_overlay.fill((80, 80, 80, 180))
-            screen.blit(grey_overlay, (grey_x, header_height))
+            screen.blit(_edit_grey, (half_width if edit_p == 1 else 0, header_height))
 
-            # Determine label colors
-            edit_color = BLUE if edit_p == 1 else RED
-            edit_name = "Blue" if edit_p == 1 else "Red"
+            bsrf = surf_edit_blue_banner if edit_p == 1 else surf_edit_red_banner
+            screen.blit(_banner_bg, _banner_bg.get_rect(center=(cx, header_height + 40)))
+            bc(bsrf, cx, header_height + 40)
 
-            # Top banner
-            banner_font = pygame.font.Font(None, 70)
-            banner_surf = banner_font.render(f"Edit {edit_name} Score", True, edit_color)
-            banner_bg = pygame.Surface((banner_surf.get_width() + 40, banner_surf.get_height() + 16), pygame.SRCALPHA)
-            banner_bg.fill((20, 20, 20, 210))
-            banner_rect = banner_surf.get_rect(center=(width // 2, header_height + 40))
-            screen.blit(banner_bg, banner_bg.get_rect(center=banner_rect.center))
-            screen.blit(banner_surf, banner_rect)
+            screen.blit(_bar_bg, (0, _bar_y))
+            pygame.draw.rect(screen, GREY, pygame.Rect(0, _bar_y, width, _bar_h), 2)
+            lbls = [surf_edit_black_lbl, surf_edit_white_lbl, surf_edit_p1_lbl, surf_edit_blue_lbl]
+            for i, (seg_s, lbl_s) in enumerate(zip(_seg_surfs, lbls)):
+                sx = i * _seg_w
+                screen.blit(seg_s, (sx + 2, _bar_y + 2))
+                bc(lbl_s, sx + _seg_w // 2, _bar_y + _bar_h // 2)
 
-            # Bottom controls bar
-            ctrl_font = pygame.font.Font(None, 42)
-            controls = [
-                ("Black = +1", (20, 20, 20), (200, 200, 200)),
-                ("White = -1", WHITE, (60, 60, 60)),
-                ("P1 = Done", (180, 180, 255), DARK_GREY),
-                (f"Blue = Skeech", BLUE, (230, 230, 255)),
-            ]
-            bar_h = 54
-            bar_y = height - footer_height - bar_h - 6
-            bar_w = width
-            bar_bg = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-            bar_bg.fill((30, 30, 30, 220))
-            screen.blit(bar_bg, (0, bar_y))
-            pygame.draw.rect(screen, GREY, pygame.Rect(0, bar_y, bar_w, bar_h), 2)
-
-            seg_w = bar_w // len(controls)
-            for i, (label, txt_color, bg_color) in enumerate(controls):
-                seg_x = i * seg_w
-                seg_surf = pygame.Surface((seg_w - 4, bar_h - 4), pygame.SRCALPHA)
-                seg_surf.fill((*bg_color, 200))
-                screen.blit(seg_surf, (seg_x + 2, bar_y + 2))
-                lbl = ctrl_font.render(label, True, txt_color)
-                screen.blit(lbl, lbl.get_rect(center=(seg_x + seg_w // 2, bar_y + bar_h // 2)))
-
-            # Skeech confirmation popup (drawn on top)
             if game.state == STATE_SKEECH_CONFIRM:
-                popup_w, popup_h = 600, 220
-                popup_x = width // 2 - popup_w // 2
-                popup_y = height // 2 - popup_h // 2
-                popup_surf = pygame.Surface((popup_w, popup_h), pygame.SRCALPHA)
-                popup_surf.fill((20, 20, 20, 240))
-                screen.blit(popup_surf, (popup_x, popup_y))
-                pygame.draw.rect(screen, edit_color, pygame.Rect(popup_x, popup_y, popup_w, popup_h), 3, border_radius=10)
+                ec = BLUE if edit_p == 1 else RED
+                ts = surf_sc_blue_title if edit_p == 1 else surf_sc_red_title
+                screen.blit(_sc_pop_s, (_sc_pop_x, _sc_pop_y))
+                pygame.draw.rect(screen, ec,
+                                 pygame.Rect(_sc_pop_x, _sc_pop_y, _sc_pop_w, _sc_pop_h),
+                                 3, border_radius=10)
+                bc(ts, cx, _sc_pop_y + 75)
+                cur_x  = cx - SC_SUBLINE_W // 2
+                sub_y  = _sc_pop_y + 165
+                for s in (surf_sc_press, surf_sc_blue, surf_sc_confirm,
+                          surf_sc_white_word, surf_sc_cancel):
+                    screen.blit(s, (cur_x, sub_y))
+                    cur_x += s.get_width()
 
-                pop_font = pygame.font.Font(None, 90)
-                pop_surf = pop_font.render(f"{edit_name} Skeech?", True, edit_color)
-                screen.blit(pop_surf, pop_surf.get_rect(center=(width // 2, popup_y + 70)))
-
-                sub_font2 = pygame.font.Font(None, 46)
-                sub_surf = sub_font2.render("Press Blue to confirm  or  White to cancel", True, WHITE)
-                screen.blit(sub_surf, sub_surf.get_rect(center=(width // 2, popup_y + 155)))
-
-        # Confirm Quit overlay — drawn on top of any state
+        # ---- Confirm Quit / Exit — always drawn on top ----
         if game.state == STATE_CONFIRM_QUIT:
-            draw_overlay_box(screen, width, height)
+            draw_overlay()
+            surf_quit_title.set_alpha(int(200 + 55 * math.sin(pt * 4)))
+            bc(surf_quit_title, cx, height // 2 - 120)
 
-            cf = pygame.font.Font(None, 130)
-            pulse_alpha = int(200 + 55 * math.sin(game.pulse_time * 4))
-            cs = cf.render("Exit Game?", True, YELLOW)
-            cs.set_alpha(pulse_alpha)
-            screen.blit(cs, cs.get_rect(center=(width // 2, height // 2 - 120)))
-
-            msg_font2 = pygame.font.Font(None, 62)
-            yes_surf  = msg_font2.render("White Button = Back to Menu", True, WHITE)
-            no_surf   = msg_font2.render("Black Button = Cancel",       True, (20, 20, 20))
-            kill_surf = msg_font2.render("Red Button = Kill App",       True, RED)
-
-            pad_x, pad_y, row_gap = 40, 24, 14
-            row_h   = yes_surf.get_height() + pad_y
-            panel_w = max(yes_surf.get_width(), no_surf.get_width(), kill_surf.get_width()) + pad_x * 2
-            panel_h = row_h * 3 + pad_y + row_gap * 2
-            panel_x = width  // 2 - panel_w // 2
-            panel_y = height // 2 - 10
-
-            panel_surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-            panel_surf.fill((80, 85, 95, 235))
-            screen.blit(panel_surf, (panel_x, panel_y))
-            pygame.draw.rect(screen, WHITE, pygame.Rect(panel_x, panel_y, panel_w, panel_h), width=3, border_radius=8)
-
-            cx = width // 2
-
-            # Row 1: White = back to menu
-            row1_y = panel_y + pad_y
-            screen.blit(yes_surf, yes_surf.get_rect(center=(cx, row1_y + row_h // 2))) 
-
-            div1_y = row1_y + row_h + row_gap // 2
-            pygame.draw.line(screen, (140, 145, 155), (panel_x + 20, div1_y), (panel_x + panel_w - 20, div1_y), 1)
-
-            # Row 2: Black = cancel, light strip
-            row2_y = div1_y + row_gap // 2
-            strip2 = pygame.Surface((panel_w - 6, row_h), pygame.SRCALPHA)
-            strip2.fill((215, 215, 215, 250))
-            strip2_rect = pygame.Rect(panel_x + 3, row2_y, panel_w - 6, row_h)
-            screen.blit(strip2, strip2_rect)
-            pygame.draw.rect(screen, (120, 120, 120), strip2_rect, width=2, border_radius=5)
-            screen.blit(no_surf, no_surf.get_rect(center=(cx, row2_y + row_h // 2)))
-
-            div2_y = row2_y + row_h + row_gap // 2
-            pygame.draw.line(screen, (140, 145, 155), (panel_x + 20, div2_y), (panel_x + panel_w - 20, div2_y), 1)
-
-            # Row 3: Red = kill, dark red strip
-            row3_y = div2_y + row_gap // 2
-            strip3 = pygame.Surface((panel_w - 6, row_h), pygame.SRCALPHA)
-            strip3.fill((60, 10, 10, 230))
-            strip3_rect = pygame.Rect(panel_x + 3, row3_y, panel_w - 6, row_h)
-            screen.blit(strip3, strip3_rect)
-            pygame.draw.rect(screen, RED, strip3_rect, width=2, border_radius=5)
-            screen.blit(kill_surf, kill_surf.get_rect(center=(cx, row3_y + row_h // 2)))
+            draw_panel(_quit_panel_s, _quit_panel_x, _quit_panel_y, _quit_panel_w, _quit_panel_h)
+            row1_y = _quit_panel_y + _PAD_Y
+            bc(surf_quit_yes, cx, row1_y + _quit_row_h // 2)
+            div1_y = row1_y + _quit_row_h + _ROW_GAP // 2
+            divider(_quit_panel_x, div1_y, _quit_panel_w)
+            row2_y = div1_y + _ROW_GAP // 2
+            draw_strip(_quit_strip_no, _quit_panel_x, row2_y, _quit_panel_w, _quit_row_h)
+            bc(surf_quit_no, cx, row2_y + _quit_row_h // 2)
+            div2_y = row2_y + _quit_row_h + _ROW_GAP // 2
+            divider(_quit_panel_x, div2_y, _quit_panel_w)
+            row3_y = div2_y + _ROW_GAP // 2
+            draw_strip(_quit_strip_kill, _quit_panel_x, row3_y, _quit_panel_w, _quit_row_h,
+                       border_col=RED)
+            bc(surf_quit_kill, cx, row3_y + _quit_row_h // 2)
 
         pygame.display.flip()
-        clock.tick(60)
 
     pygame.quit()
     sys.exit()
+
 
 if __name__ == "__main__":
     main()
