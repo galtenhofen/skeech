@@ -289,46 +289,28 @@ def draw_scoreboard(screen, game, width, height, header_height, footer_height, s
 
     pygame.draw.line(screen, BLACK, (half_width, header_height), (half_width, height - footer_height), 4)
 
-    # Winner text — drawn just above the score number
-    score_center_y = header_height + scoreboard_height // 2
-
+    # Winner text
     if game.winner == 1:
         time_since_win = pygame.time.get_ticks() - game.winner_announced_time
         scale = get_winner_text_scale(time_since_win)
         winner_color = get_winner_text_color(game.pulse_time)
-        # Cap font size so WINNER fits within half_width
-        base_size = min(int(110 * scale), int(half_width * 0.85 / 6 * 10))
-        scaled_font = pygame.font.Font(None, base_size)
-        winner_surf = scaled_font.render("WINNER", True, winner_color)
-        # Clamp width to half_width - 20
-        if winner_surf.get_width() > half_width - 20:
-            base_size = int(base_size * (half_width - 20) / winner_surf.get_width())
-            scaled_font = pygame.font.Font(None, max(40, base_size))
-            winner_surf = scaled_font.render("WINNER", True, winner_color)
-        winner_y = score_center_y - 230 - winner_surf.get_height() // 2
+        scaled_font = pygame.font.Font(None, int(150 * scale))
         draw_glow_text(screen, "WINNER", scaled_font, winner_color,
-                       half_width // 2, winner_y, YELLOW, glow_amount=8)
+                       half_width // 2, header_height + 220, YELLOW, glow_amount=8)
 
     draw_text_centered(screen, str(game.player1_score), score_font, WHITE,
-                       half_width // 2, score_center_y)
+                       half_width // 2, header_height + scoreboard_height // 2)
 
     if game.winner == 2:
         time_since_win = pygame.time.get_ticks() - game.winner_announced_time
         scale = get_winner_text_scale(time_since_win)
         winner_color = get_winner_text_color(game.pulse_time)
-        base_size = min(int(110 * scale), int(half_width * 0.85 / 6 * 10))
-        scaled_font = pygame.font.Font(None, base_size)
-        winner_surf = scaled_font.render("WINNER", True, winner_color)
-        if winner_surf.get_width() > half_width - 20:
-            base_size = int(base_size * (half_width - 20) / winner_surf.get_width())
-            scaled_font = pygame.font.Font(None, max(40, base_size))
-            winner_surf = scaled_font.render("WINNER", True, winner_color)
-        winner_y = score_center_y - 230 - winner_surf.get_height() // 2
+        scaled_font = pygame.font.Font(None, int(150 * scale))
         draw_glow_text(screen, "WINNER", scaled_font, winner_color,
-                       half_width + half_width // 2, winner_y, YELLOW, glow_amount=8)
+                       half_width + half_width // 2, header_height + 220, YELLOW, glow_amount=8)
 
     draw_text_centered(screen, str(game.player2_score), score_font, WHITE,
-                       half_width + half_width // 2, score_center_y)
+                       half_width + half_width // 2, header_height + scoreboard_height // 2)
 
     # Header / Footer
     pygame.draw.rect(screen, DARK_GREY, (0, 0, width, header_height))
@@ -345,16 +327,6 @@ def main():
     game = GameState()
     clock = pygame.time.Clock()
     running = True
-
-#    if pygame.joystick.get_count() > 0:
-#        joystick = pygame.joystick.Joystick(0)
-#        joystick.init()
-#    if pygame.joystick.get_count() > 1:
-#        joystick2 = pygame.joystick.Joystick(1)
-#        joystick2.init()
-#    if pygame.joystick.get_count() > 2:
-#        joystick3= pygame.joystick.Joystick(2)
-#        joystick3.init()
 
     header_height = 20
     footer_height = 20
@@ -434,6 +406,9 @@ def main():
                         game.go_to_welcome()
                     elif event.joy == 2 and event.button == 4: # Black = No, cancel
                         game.state = game.pre_quit_state
+                    elif event.joy == 1 and event.button == 2: # Red = Kill app completely
+                        pygame.quit()
+                        sys.exit()
 
                 # ---- Declare Winner confirm dialog ----
                 elif game.state == STATE_DECLARE_WINNER:
@@ -446,19 +421,6 @@ def main():
                     elif event.joy == 2 and event.button == 8: # White = cancel
                         game.state = game.pre_declare_state
                         game.declare_winner_player = None
-                    elif event.joy == 2 and event.button == 7: # Blue = Skeech
-                        # The player attempting retribution (NOT retribution_player who hit 21 first)
-                        # gets the skeech — they are the opponent of retribution_player
-                        if game.retribution_player is not None:
-                            skeech_w = 2 if game.retribution_player == 1 else 1
-                        else:
-                            skeech_w = game.declare_winner_player
-                        game.winner = skeech_w
-                        game.skeech_winner = skeech_w
-                        game.game_active = False
-                        game.winner_announced_time = now
-                        game.declare_winner_player = None
-                        game.state = STATE_WINNER
 
                 elif event.joy == 2 and event.button == 3:
                     game.start_game()
@@ -783,19 +745,17 @@ def main():
             pulse_alpha = int(200 + 55 * math.sin(game.pulse_time * 4))
             dw_surf = dw_font.render(f"Declare {player_name} Winner?", True, name_color)
             dw_surf.set_alpha(pulse_alpha)
-            screen.blit(dw_surf, dw_surf.get_rect(center=(width // 2, height // 2 - 110)))
+            screen.blit(dw_surf, dw_surf.get_rect(center=(width // 2, height // 2 - 80)))
 
-            msg_font3    = pygame.font.Font(None, 60)
-            conf_surf    = msg_font3.render("Black Button = Confirm", True, (20, 20, 20))
-            cancel_surf  = msg_font3.render("White Button = Cancel",  True, WHITE)
-            skeech_surf3 = msg_font3.render("Blue Button = Skeech",   True, BLUE)
+            msg_font3   = pygame.font.Font(None, 60)
+            conf_surf   = msg_font3.render("Black Button = Confirm", True, (20, 20, 20))
+            cancel_surf = msg_font3.render("White Button = Cancel",  True, WHITE)
 
             pad_x, pad_y, row_gap = 40, 24, 14
-            panel_w = max(conf_surf.get_width(), cancel_surf.get_width(), skeech_surf3.get_width()) + pad_x * 2
-            row_h   = conf_surf.get_height() + pad_y
-            panel_h = row_h * 3 + pad_y * 2 + row_gap * 2
+            panel_w = max(conf_surf.get_width(), cancel_surf.get_width()) + pad_x * 2
+            panel_h = conf_surf.get_height() + cancel_surf.get_height() + pad_y * 2 + row_gap
             panel_x = width  // 2 - panel_w // 2
-            panel_y = height // 2 - 20
+            panel_y = height // 2 + 20
 
             panel_surf2 = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
             panel_surf2.fill((80, 85, 95, 235))
@@ -804,31 +764,20 @@ def main():
 
             # Row 1: Black = confirm on light strip
             row1_y = panel_y + pad_y
-            strip1 = pygame.Surface((panel_w - 6, row_h), pygame.SRCALPHA)
+            strip1_h = conf_surf.get_height() + pad_y
+            strip1 = pygame.Surface((panel_w - 6, strip1_h), pygame.SRCALPHA)
             strip1.fill((215, 215, 215, 250))
-            strip1_rect = pygame.Rect(panel_x + 3, row1_y, panel_w - 6, row_h)
+            strip1_rect = pygame.Rect(panel_x + 3, row1_y, panel_w - 6, strip1_h)
             screen.blit(strip1, strip1_rect)
             pygame.draw.rect(screen, (120, 120, 120), strip1_rect, width=2, border_radius=5)
-            screen.blit(conf_surf, conf_surf.get_rect(center=(width // 2, row1_y + row_h // 2)))
+            screen.blit(conf_surf, conf_surf.get_rect(center=(width // 2, row1_y + strip1_h // 2)))
 
-            div1_y = row1_y + row_h + row_gap // 2
-            pygame.draw.line(screen, (140, 145, 155), (panel_x + 20, div1_y), (panel_x + panel_w - 20, div1_y), 1)
+            div_y = row1_y + strip1_h + row_gap // 2
+            pygame.draw.line(screen, (140, 145, 155), (panel_x + 20, div_y), (panel_x + panel_w - 20, div_y), 1)
 
             # Row 2: White = cancel on dark background
-            row2_y = div1_y + row_gap // 2
-            screen.blit(cancel_surf, cancel_surf.get_rect(center=(width // 2, row2_y + row_h // 2)))
-
-            div2_y = row2_y + row_h + row_gap // 2
-            pygame.draw.line(screen, (140, 145, 155), (panel_x + 20, div2_y), (panel_x + panel_w - 20, div2_y), 1)
-
-            # Row 3: Blue = Skeech on dark blue-tinted strip
-            row3_y = div2_y + row_gap // 2
-            strip3 = pygame.Surface((panel_w - 6, row_h), pygame.SRCALPHA)
-            strip3.fill((20, 30, 80, 220))
-            strip3_rect = pygame.Rect(panel_x + 3, row3_y, panel_w - 6, row_h)
-            screen.blit(strip3, strip3_rect)
-            pygame.draw.rect(screen, BLUE, strip3_rect, width=2, border_radius=5)
-            screen.blit(skeech_surf3, skeech_surf3.get_rect(center=(width // 2, row3_y + row_h // 2)))
+            row2_y = div_y + row_gap // 2
+            screen.blit(cancel_surf, cancel_surf.get_rect(center=(width // 2, row2_y + cancel_surf.get_height() // 2 + 8)))
 
         elif game.state == STATE_WINNER:
             press_start_font = pygame.font.Font(None, 80)
@@ -842,16 +791,14 @@ def main():
             pygame.draw.rect(screen, YELLOW, box_rect, 3)
             screen.blit(press_start_text, rect)
 
-            # If this was a skeech win, show "You got Skeeched!" on loser side (below the score)
+            # If this was a skeech win, show "You got Skeeched!" on loser side
             if hasattr(game, 'skeech_winner') and game.skeech_winner is not None:
                 loser_side_x = (half_width + half_width // 2) if game.skeech_winner == 1 else half_width // 2
                 skeech_font = pygame.font.Font(None, 80)
                 skeech_pulse = int(200 + 55 * math.sin(game.pulse_time * 3.5))
                 skeech_surf = skeech_font.render("You got Skeeched!", True, YELLOW)
                 skeech_surf.set_alpha(skeech_pulse)
-                score_center_y = header_height + scoreboard_height // 2
-                skeech_y = score_center_y + 200
-                screen.blit(skeech_surf, skeech_surf.get_rect(center=(loser_side_x, skeech_y)))
+                screen.blit(skeech_surf, skeech_surf.get_rect(center=(loser_side_x, header_height + scoreboard_height // 2 + 100)))
 
         elif game.state in (STATE_EDIT_SCORE, STATE_SKEECH_CONFIRM):
             # Grey out the non-edited player's side
@@ -901,22 +848,7 @@ def main():
 
             # Skeech confirmation popup (drawn on top)
             if game.state == STATE_SKEECH_CONFIRM:
-                sub_font2 = pygame.font.Font(None, 46)
-                # Measure all sub-line pieces to compute needed width
-                press_surf    = sub_font2.render("Press ", True, WHITE)
-                blue_lbl_surf = sub_font2.render("Blue", True, BLUE)
-                confirm_surf  = sub_font2.render(" to confirm  or  ", True, WHITE)
-                white_lbl_surf = sub_font2.render("White", True, (220, 220, 220))
-                cancel_surf   = sub_font2.render(" to cancel", True, WHITE)
-                sub_total_w = (press_surf.get_width() + blue_lbl_surf.get_width() +
-                               confirm_surf.get_width() + white_lbl_surf.get_width() +
-                               cancel_surf.get_width())
-
-                pop_font = pygame.font.Font(None, 90)
-                title_surf = pop_font.render(f"{edit_name} Skeech?", True, edit_color)
-
-                popup_w = max(title_surf.get_width(), sub_total_w) + 80
-                popup_h = 240
+                popup_w, popup_h = 600, 220
                 popup_x = width // 2 - popup_w // 2
                 popup_y = height // 2 - popup_h // 2
                 popup_surf = pygame.Surface((popup_w, popup_h), pygame.SRCALPHA)
@@ -924,14 +856,13 @@ def main():
                 screen.blit(popup_surf, (popup_x, popup_y))
                 pygame.draw.rect(screen, edit_color, pygame.Rect(popup_x, popup_y, popup_w, popup_h), 3, border_radius=10)
 
-                screen.blit(title_surf, title_surf.get_rect(center=(width // 2, popup_y + 75)))
+                pop_font = pygame.font.Font(None, 90)
+                pop_surf = pop_font.render(f"{edit_name} Skeech?", True, edit_color)
+                screen.blit(pop_surf, pop_surf.get_rect(center=(width // 2, popup_y + 70)))
 
-                # Draw sub-line with colored words inline
-                sub_line_y = popup_y + 165
-                cur_x = width // 2 - sub_total_w // 2
-                for surf in (press_surf, blue_lbl_surf, confirm_surf, white_lbl_surf, cancel_surf):
-                    screen.blit(surf, (cur_x, sub_line_y))
-                    cur_x += surf.get_width()
+                sub_font2 = pygame.font.Font(None, 46)
+                sub_surf = sub_font2.render("Press Blue to confirm  or  White to cancel", True, WHITE)
+                screen.blit(sub_surf, sub_surf.get_rect(center=(width // 2, popup_y + 155)))
 
         # Confirm Quit overlay — drawn on top of any state
         if game.state == STATE_CONFIRM_QUIT:
@@ -939,39 +870,56 @@ def main():
 
             cf = pygame.font.Font(None, 130)
             pulse_alpha = int(200 + 55 * math.sin(game.pulse_time * 4))
-            cs = cf.render("Quit to Menu?", True, YELLOW)
+            cs = cf.render("Exit Game?", True, YELLOW)
             cs.set_alpha(pulse_alpha)
-            screen.blit(cs, cs.get_rect(center=(width // 2, height // 2 - 100)))
+            screen.blit(cs, cs.get_rect(center=(width // 2, height // 2 - 120)))
 
             msg_font2 = pygame.font.Font(None, 62)
-            yes_surf = msg_font2.render("White Button = Yes", True, WHITE)
-            no_surf  = msg_font2.render("Black Button = No",  True, (20, 20, 20))
+            yes_surf  = msg_font2.render("White Button = Back to Menu", True, WHITE)
+            no_surf   = msg_font2.render("Black Button = Cancel",       True, (20, 20, 20))
+            kill_surf = msg_font2.render("Red Button = Kill App",       True, RED)
 
             pad_x, pad_y, row_gap = 40, 24, 14
-            panel_w = max(yes_surf.get_width(), no_surf.get_width()) + pad_x * 2
-            panel_h = yes_surf.get_height() + no_surf.get_height() + pad_y * 2 + row_gap
+            row_h   = yes_surf.get_height() + pad_y
+            panel_w = max(yes_surf.get_width(), no_surf.get_width(), kill_surf.get_width()) + pad_x * 2
+            panel_h = row_h * 3 + pad_y + row_gap * 2
             panel_x = width  // 2 - panel_w // 2
-            panel_y = height // 2 + 10
+            panel_y = height // 2 - 10
 
             panel_surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
             panel_surf.fill((80, 85, 95, 235))
             screen.blit(panel_surf, (panel_x, panel_y))
             pygame.draw.rect(screen, WHITE, pygame.Rect(panel_x, panel_y, panel_w, panel_h), width=3, border_radius=8)
 
+            cx = width // 2
+
+            # Row 1: White = back to menu
             row1_y = panel_y + pad_y
-            screen.blit(yes_surf, yes_surf.get_rect(center=(width // 2, row1_y + yes_surf.get_height() // 2)))
+            screen.blit(yes_surf, yes_surf.get_rect(center=(cx, row1_y + row_h // 2))) 
 
-            div_y = row1_y + yes_surf.get_height() + row_gap // 2
-            pygame.draw.line(screen, (140, 145, 155), (panel_x + 20, div_y), (panel_x + panel_w - 20, div_y), 1)
+            div1_y = row1_y + row_h + row_gap // 2
+            pygame.draw.line(screen, (140, 145, 155), (panel_x + 20, div1_y), (panel_x + panel_w - 20, div1_y), 1)
 
-            row2_y = div_y + row_gap // 2
-            strip_h = no_surf.get_height() + pad_y
-            strip = pygame.Surface((panel_w - 6, strip_h), pygame.SRCALPHA)
-            strip.fill((215, 215, 215, 250))
-            strip_rect = pygame.Rect(panel_x + 3, row2_y, panel_w - 6, strip_h)
-            screen.blit(strip, strip_rect)
-            pygame.draw.rect(screen, (120, 120, 120), strip_rect, width=2, border_radius=5)
-            screen.blit(no_surf, no_surf.get_rect(center=(width // 2, row2_y + strip_h // 2)))
+            # Row 2: Black = cancel, light strip
+            row2_y = div1_y + row_gap // 2
+            strip2 = pygame.Surface((panel_w - 6, row_h), pygame.SRCALPHA)
+            strip2.fill((215, 215, 215, 250))
+            strip2_rect = pygame.Rect(panel_x + 3, row2_y, panel_w - 6, row_h)
+            screen.blit(strip2, strip2_rect)
+            pygame.draw.rect(screen, (120, 120, 120), strip2_rect, width=2, border_radius=5)
+            screen.blit(no_surf, no_surf.get_rect(center=(cx, row2_y + row_h // 2)))
+
+            div2_y = row2_y + row_h + row_gap // 2
+            pygame.draw.line(screen, (140, 145, 155), (panel_x + 20, div2_y), (panel_x + panel_w - 20, div2_y), 1)
+
+            # Row 3: Red = kill, dark red strip
+            row3_y = div2_y + row_gap // 2
+            strip3 = pygame.Surface((panel_w - 6, row_h), pygame.SRCALPHA)
+            strip3.fill((60, 10, 10, 230))
+            strip3_rect = pygame.Rect(panel_x + 3, row3_y, panel_w - 6, row_h)
+            screen.blit(strip3, strip3_rect)
+            pygame.draw.rect(screen, RED, strip3_rect, width=2, border_radius=5)
+            screen.blit(kill_surf, kill_surf.get_rect(center=(cx, row3_y + row_h // 2)))
 
         pygame.display.flip()
         clock.tick(60)
